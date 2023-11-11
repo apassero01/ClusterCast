@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <title>ClusterCast - Home</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .header {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+        }
+        .main-content {
+            display: flex;
+            flex-direction: row; /* Align children horizontally */
+            height: calc(100% - 50px); /* Adjust based on header height */
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        /* Style the input box */
+        .input-box {
+            width: 25%; /* One third of the container width */
+            background-color: #000; /* Black background */
+            color: white; /* White text color */
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto; /* Add scroll for overflow */
+        }
+        
+        /* Style the data visualization box */
+        .data-visualization {
+            width: 75%; /* Two thirds of the container width */
+            background-color: white; /* White background */
+            color: black; /* Black text color */
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto; /* Add scroll for overflow */
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            align-items: flex-start;
+        }
+        
+        .button, input, select {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%; /* Take up the full container width */
+        }
+
+        .option-container {
+            display: flex; /* Enable flexbox */
+            align-items: center; /* Align items vertically in the center */
+            margin-bottom: 0px;
+        }
+        .option-container label {
+            margin-right: 10px; /* Add some space between the label and the input box */
+        }
+        .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: block; /* Take up the full container width */
+            margin: 20px 0 0; /* Only margin-top */
+            cursor: pointer;
+        }
+        select, input[type="text"], input[type="date"], input[type="number"] {
+            width: 100%; /* Take up the full container width */
+            padding: 5px;
+            margin-top: 5px; /* Add some space above */
+        }
+        input[type="checkbox"] {
+            margin-top: 5px; /* Align with labels */
+        }
+        label {
+            display: block; /* Ensure labels take up their own line */
+        }
+        .figure-container {
+            flex: 1 1 48%; 
+            margin: 1%; /* Spacing between figure containers */
+            box-sizing: border-box;
+            min-width: calc(50% - 10px); /* Adjust this value to fit two graphs per row, accounting for the gap */
+            max-width: calc(50% - 10px); 
+        }
+
+        .figure-pair-container {
+        display: flex;
+        flex-wrap: nowrap; /* Prevent figures from wrapping */
+        justify-content: space-between; /* Space out the figures */
+        width: 100%; /* Take up the full width of the data-visualization container */
+        }
+
+        /* Flex container to hold figures in a row */
+        .figure-row {
+            display: flex;
+            flex-wrap: wrap; /* Allows items to wrap onto the next line */
+            justify-content: space-around; /* Distributes space around items */
+            align-items: flex-start; /* Aligns items at the top of the container */
+            gap: 10px; /* Spacing between items */
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ClusterCast</h1>
+    </div>
+
+    <div class="main-content">
+        <div class="input-box">
+            <!-- Text Input -->
+            <div class="option-container">
+                <label for="Number">Tickers:</label>
+                <input type="text" id="tickers" name="tickers">
+            </div>
+   
+            <!-- Date Inputs -->
+            <div class="option-container">
+                <label for="start_date">Start Date:</label>
+                <input type="date" id="start_date" name="start_date">
+            </div>
+            <div class="option-container">
+                <label for="end_date">End Date:</label>
+                <input type="date" id="end_date" name="end_date">
+            </div>
+
+            <!-- Number Input -->
+            <div class="option-container">
+                <label for="steps">Steps:</label>
+                <input type="number" id="steps" name="steps">
+            </div>
+
+            <!-- Checkboxes -->
+            <div class="option-container">
+                <label for="interval">Interval:</label>
+                <input type="text" id="interval" name="interval">
+            </div>
+            <div class="option-container">
+                <label for="cluster_features">Cluster Features:</label>
+                <input type="text" id="cluster_features" name="cluster_features">
+            </div>
+            <div class="option-container">
+                <label for="target_features">Target Features:</label>
+                <input type="text" id="target_features" name="target_features">
+            </div>
+
+
+            <!-- Submit Button -->
+            <button class="button" onclick="sendPostRequest()">Create Cluster Run</button>
+        </div>
+        <div class="data-visualization">
+            <h2>Data Visualization</h2>
+            <p>Placeholder for data visualization</p>
+        
+        </div>
+
+    <script>
+        let csrfToken = document.getElementById('csrfToken').value;
+
+        function sendPostRequest() {
+    
+          // Initialize an object to store the form values
+          let formData = {};
+      
+          // Collect value from the text input
+          formData['tickers'] = document.getElementById('tickers').value;
+      
+          // Collect values from the date inputs
+          formData['start_date'] = document.getElementById('start_date').value;
+          formData['end_date'] = document.getElementById('end_date').value;
+      
+          // Collect value from the number input
+          formData['steps'] = document.getElementById('steps').value;
+      
+          // Collect values from the checkboxes
+          formData['interval'] = document.getElementById('interval').value;
+          formData['cluster_features'] = document.getElementById('cluster_features').value;
+          formData['target_features'] = document.getElementById('target_features').value;
+        
+          // Send a POST request with the collected data
+          let dataVisContainer = document.querySelector('.data-visualization');
+          fetch('', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken
+              // Include additional headers as required by your endpoint
+            },
+            body: JSON.stringify(formData)
+          })
+            .then(response => response.json())
+            .then(data => {
+                dataVisContainer.innerHTML = '';
+                // Assuming 'data.figures' contains your list of figures
+                data.figures.forEach(tuple => {
+                    // Create a div for each figure
+                    var figurePairContainer = document.createElement('div');
+                    figurePairContainer.classList.add('figure-pair-container');
+                    dataVisContainer.appendChild(figurePairContainer);
+
+                    var fig1Div = document.createElement('div');
+                    fig1Div.classList.add('figure-container');
+                    figurePairContainer.appendChild(fig1Div);
+                    Plotly.newPlot(fig1Div, tuple[0].data, tuple[0].layout);
+
+                    var fig2Div = document.createElement('div');
+                    fig2Div.classList.add('figure-container');
+                    figurePairContainer.appendChild(fig2Div);
+                    Plotly.newPlot(fig2Div, tuple[1].data, tuple[1].layout);
+                });
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+      
+</body>
+</html>
