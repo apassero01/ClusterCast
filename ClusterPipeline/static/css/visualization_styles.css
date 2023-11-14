@@ -1,0 +1,28 @@
+
+.graph-text-pair-container {
+    display: flex;
+    flex-direction: row; /* Align children horizontally */
+    justify-content: space-between; /* Distribute space between graph and text */
+    align-items: center; /* Vertically align items in the center */
+    width: 100%; /* Full width of the parent container */
+    margin-bottom: 20px; /* Space between each pair */
+    box-sizing: border-box; /* Include padding and border in the element's width */
+}
+
+.graph-container {
+    flex: 1; /* Grow to available space */
+    max-width: 50%; /* Maximum width of the graph container */
+    height: auto; /* Maintain aspect ratio of the graph */
+    position: relative; /* Set the position context for the plot */
+}
+
+.text-data-container {
+    flex: 1; /* Allows the text container to grow and take available space */
+    /* Optional: specify a min-width to ensure a minimum size for the text */
+    min-width: 0; /* If you're having issues with overflow, start with 0 */
+    /* Adjust padding or margin as needed */
+}
+
+.preserve-whitespace {
+    white-space: pre-wrap; /* Preserves whitespace and wraps text */
+}

@@ -12,42 +12,84 @@ from tensorflow.keras.optimizers import Adam
 import pandas as pd
 from kneed import KneeLocator
 import matplotlib.pyplot as plt
+import pickle
+from django.db import models
+import os
 
-class ClusterGroupParams: 
-    def __init__(self, start_date,end_date = None): 
-        self.start_date = datetime.strptime(start_date, "%Y-%m-%d")
 
-        self.end_date = end_date
-        if self.end_date is None:
-            self.end_date = datetime.today().date()
+class SupportedParams(models.Model):
+    """
+    Class to contain potential parameters for running the pipeline
+    """
+    features = models.JSONField(default=list)
+    name = models.CharField(max_length=100,default="")
 
-        self.X_feature_dict = None 
-        self.y_feature_dict = None
+    def generate_features(self):
+        tickers = ['spy']
+        start = '2020-01-01'
+        target_cols = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
+        n_steps = 2
+        interval = '1d'
+        cluster_features = ['pctChgclose_cumulative']
+        group_params = StockClusterGroupParams(start_date = start, tickers = tickers, interval = interval, target_cols = target_cols, n_steps = n_steps,cluster_features = cluster_features)
+        group_params.scaling_dict = {
+                    'price_vars': ScalingMethod.SBSG,
+                    'trend_vars' : ScalingMethod.SBS,
+                    'pctChg_vars' : ScalingMethod.QUANT_MINMAX,
+                    'rolling_vars' : ScalingMethod.QUANT_MINMAX_G,
+                    'target_vars' : ScalingMethod.UNSCALED
+                    }
+        cluster_group = StockClusterGroup()
+        cluster_group.set_group_params(group_params)
+        cluster_group.create_data_set()
+        cluster_group.create_sequence_set()
+
+        self.features = list(cluster_group.sequence_set.group_params.X_cols)
+
+class ClusterGroupParams(models.Model): 
+    start_date = models.DateField()
+    end_date = models.DateField()
+    n_steps = models.IntegerField()
+    scaling_dict = models.JSONField(default=dict)
+    name = models.CharField(max_length=100,default="")
+    X_feature_dict = models.JSONField(default=dict)
+    y_feature_dict = models.JSONField(default=dict)
+
+    class Meta:
+        abstract = True
+    
+    def initialize(self):
         self.X_cols = None
         self.y_cols = None
         self.X_feature_sets = None
         self.y_feature_sets = None
         self.train_seq_elements = None
         self.test_seq_elements = None
-
-class StockClusterGroupParams(ClusterGroupParams): 
-
-    def __init__(self, start_date, tickers, target_cols, n_steps, cluster_features, interval = '1d', end_date = None): 
-        super().__init__(start_date, end_date)
-        self.tickers = tickers
-        self.target_cols = target_cols
-        self.n_steps = n_steps
-        self.interval = interval
-        self.cluster_features = cluster_features
-
+        self.name = str(self.tickers) + str(self.start_date) + "-" + str(self.end_date) + str(self.n_steps) +"steps"
+    
+    def set_scaling_dict(self,scaling_dict):
         self.scaling_dict = {
-            'price_vars': ScalingMethod.SBSG,
-            'trend_vars' : ScalingMethod.SBS,
-            'pctChg_vars' : ScalingMethod.QUANT_MINMAX,
-            'rolling_vars' : ScalingMethod.QUANT_MINMAX_G,
-            'target_vars' : ScalingMethod.UNSCALED
+            key: value.value for key, value in scaling_dict.items()
+        }
+    def get_scaling_dict(self):
+        return {
+            key: ScalingMethod(value) for key, value in self.scaling_dict.items()
         }
 
+class StockClusterGroupParams(ClusterGroupParams): 
+    tickers = models.JSONField(default=list)
+    target_cols = models.JSONField(default=list)
+    interval = models.CharField(max_length=10)
+    cluster_features = models.JSONField(default=list)
+
+        # self.scaling_dict = {
+        #     'price_vars': ScalingMethod.SBSG,
+        #     'trend_vars' : ScalingMethod.SBS,
+        #     'pctChg_vars' : ScalingMethod.QUANT_MINMAX,
+        #     'rolling_vars' : ScalingMethod.QUANT_MINMAX_G,
+        #     'target_vars' : ScalingMethod.UNSCALED
+        # }
+    
 
 
 class ClusterPeriod: 
@@ -93,10 +135,12 @@ class StockClusterPeriod(ClusterPeriod):
 
 
 
-class ClusterGroup: 
-    def __init__(self,group_params = None): 
-        self.group_params = group_params
-    
+class ClusterGroup(models.Model): 
+    n_clusters = models.IntegerField(default=0)
+    class Meta:
+        abstract = True
+        
+
     def set_group_params(self,group_params): 
         self.group_params = group_params
 
@@ -107,10 +151,7 @@ class ClusterGroup:
         pass
 
 class StockClusterGroup(ClusterGroup):
-    def __init__(self,group_params = None): 
-        super().__init__(group_params=group_params)
-        self.data_set = None
-        self.sequence_set = None
+    group_params = models.OneToOneField(StockClusterGroupParams, on_delete=models.CASCADE, related_name='group_params')
 
     def create_data_set(self):
         self.data_set = StockDataSet(self.group_params)
@@ -179,6 +220,7 @@ class StockClusterGroup(ClusterGroup):
 
     
     def create_clusters(self):
+
         train_seq_elements = self.group_params.train_seq_elements
         test_seq_elements = self.group_params.test_seq_elements
 
@@ -189,22 +231,40 @@ class StockClusterGroup(ClusterGroup):
         for label in train_labels:
             cur_train_seq_elements = [x for x in train_seq_elements if x.cluster_label == label]
             cur_test_seq_elements = [x for x in test_seq_elements if x.cluster_label == label]
-            self.clusters.append(StockCluster(self,cur_train_seq_elements,cur_test_seq_elements))
+
+            if len(cur_train_seq_elements) == 0 or len(cur_test_seq_elements) == 0:
+                continue
+
+            cluster = StockCluster.objects.create(label=label, cluster_group=self)
+            cluster.initialize(cur_train_seq_elements,cur_test_seq_elements)
+            self.clusters.append(cluster)
 
 
-    def display_all_clusters(self):
-        for cluster in self.clusters:
-            fig = cluster.visualize_cluster()
-            fig.show()
+    # def display_all_clusters(self):
+    #     for cluster in self.clusters:
+    #         fig = cluster.visualize_cluster()
+    #         fig.show()
     
     def train_all_rnns(self,model_features, fine_tune = True):
         model = None 
         if fine_tune:
             self.train_general_model(model_features)
             model = self.general_model
-         
+        
+        self.filtered_clusters = []
+
         for cluster in self.clusters:
             cluster.train_rnn(model_features,model)
+            cluster.filter_results()
+            if cluster.num_results > 0:
+                self.filtered_clusters.append(cluster)
+                cluster.serialize()
+                cluster.save() 
+            else: 
+                cluster.delete()
+
+        self.group_params.save() 
+
     
     def train_general_model(self,model_features):
         X_train = self.filter_by_features(self.X_train, model_features)
@@ -229,25 +289,64 @@ class StockClusterGroup(ClusterGroup):
         return self.X_train, self.y_train, self.X_test, self.y_test
 
 
-class Cluster:
-    def __init__(self, cluster_group,train_seq_elements,test_seq_elements):
-        self.cluster_group = cluster_group
+class Cluster(models.Model):
+    label = models.IntegerField(default=-1)
+    elements_file_string = models.CharField(max_length=100,default="")
+    model_file_string = models.CharField(max_length=100,default="")
+    class Meta:
+        abstract = True
+    
+    def initialize(self,train_seq_elements,test_seq_elements):
         self.train_seq_elements = train_seq_elements
         self.test_seq_elements = test_seq_elements
-    
+        self.get_3d_array()
+        
     def get_3d_array(self):
+        if len(self.train_seq_elements) == 0 or len(self.test_seq_elements) == 0:
+            raise ValueError("No sequences in this cluster")
+        
         self.X_train, self.y_train = SequenceElement.create_array(self.train_seq_elements)
         self.X_test, self.y_test = SequenceElement.create_array(self.test_seq_elements)
         return self.X_train, self.y_train, self.X_test, self.y_test
+    
+    def serialize(self):
+        group_name = self.cluster_group.group_params.name
+        item_dict = {
+            "train_seq_elements": self.train_seq_elements,
+            "test_seq_elements": self.test_seq_elements,
+        }
+        self.elements_file_string = f"SavedModels/{group_name}/Cluster{self.label}Elements.pkl"
+        self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}Model.pkl"
+
+
+        directory1 = os.path.dirname(self.elements_file_string)
+        directory2 = os.path.dirname(self.model_file_string)
+
+        # Check if the directory exists
+        if not os.path.exists(directory1):
+            # Create the directory if it doesn't exist
+            os.makedirs(directory1)
+
+        with open(directory1, 'wb') as f:
+            pickle.dump(item_dict, f)
+        with open(directory2, 'wb') as f:
+            pickle.dump(self.model, f)
+    
+    def deserialize_elements(self):
+        with open(self.elements_file_string, 'rb') as f:
+            item_dict = pickle.load(f)
+        
+        self.train_seq_elements = item_dict["train_seq_elements"]
+        self.test_seq_elements = item_dict["test_seq_elements"]
+
+        self.get_3d_array()
+    
+    def deserialize_model(self):
+        with open(self.model_file_string, 'rb') as f:
+            self.model = pickle.load(f)
 
 class StockCluster(Cluster):
-    def __init__(self,cluster_group, train_seq_elements, test_seq_elements):
-        super().__init__(cluster_group,train_seq_elements,test_seq_elements)
-        self.cluster_group = cluster_group
-        self.train_seq_elements = train_seq_elements
-        self.test_seq_elements = test_seq_elements
-        self.label = train_seq_elements[0].cluster_label
-        self.get_3d_array()
+    cluster_group = models.ForeignKey(StockClusterGroup, on_delete=models.CASCADE, related_name='clusters_obj')
     
     def remove_outliers(self):
         pass
@@ -358,16 +457,24 @@ class StockCluster(Cluster):
         num_days = predicted_y.shape[1]  # Assuming this is the number of days
         results = pd.DataFrame(predicted_y, columns=[f'predicted_{i+1}' for i in range(num_days)])
 
+        
         for i in range(num_days):
             results[f'real_{i+1}'] = y_test[:, i]
 
         # Generate output string with accuracies
+
         output_string = f"Cluster Number: {self.label}\n"
+        self.step_results = [] 
         for i in range(num_days):
+            step_result = StepResult.objects.create(steps_in_future = i+1, cluster = self,train_set_length = len(X_train_filtered), test_set_length = len(y_test))
             same_day = ((results[f'predicted_{i+1}'] > 0) & (results[f'real_{i+1}'] > 0)) | \
                     ((results[f'predicted_{i+1}'] < 0) & (results[f'real_{i+1}'] < 0))
             accuracy = round(same_day.mean() * 100,2)
             w_accuracy = round(weighted_dir_acc(results[f'predicted_{i+1}'], results[f'real_{i+1}']),2)
+
+            step_result.dir_accuracy = accuracy
+            step_result.weighted_dir_acc = w_accuracy
+            step_result.save()
 
             output_string += (
                 f"Accuracy{i+1}D {accuracy}% (Weighted: {w_accuracy}%) "
@@ -380,6 +487,21 @@ class StockCluster(Cluster):
         with open('output.txt', 'a') as f:
             f.write(output_string)
 
+    
+    def filter_results(self,threshhold = 0.2,test_set_length = 30):
+        self.step_results = StepResult.objects.filter(cluster = self)
+        for result in self.step_results:
+            if result.dir_accuracy < threshhold or result.test_set_length < test_set_length:
+                result.delete()
+        self.num_results = len(self.step_results)
+    
+    def generate_results_string(self):
+        string = "Train Set Length: " + str(len(self.X_train)) + " Test Set Length: " + str(len(self.y_test)) + "\n"
+        self.step_results = self.cluster_results.all()
+        for result in self.step_results:
+            string += result.get_results_string()
+        return string
+    
 
 
 
@@ -448,7 +570,19 @@ def clone_for_tuning(base_model, freeze_up_to_layer_name, learning_rate=0.0001):
 
     return new_model
 
-    
+class StepResult(models.Model):
+    steps_in_future = models.IntegerField(default=0)
+    cluster = models.ForeignKey(StockCluster, on_delete=models.CASCADE, related_name='cluster_results')
+    dir_accuracy = models.FloatField(default=0)
+    weighted_dir_acc = models.FloatField(default=0)
+    predicted_return = models.FloatField(default=0)
+    actual_return = models.FloatField(default=0)
+    train_set_length = models.IntegerField(default=0)
+    test_set_length = models.IntegerField(default=0)
+
+    def get_results_string(self):
+        return str(self.steps_in_future) +"Step, " + str(self.dir_accuracy) + "% Accuracy, " + str(self.weighted_dir_acc) + "% Weighted Accuracy, " + str(self.predicted_return) + " Predicted Return, " + str(self.actual_return) + " Actual Return\n"
+
 
 
 

@@ -13,7 +13,6 @@ from sklearn.preprocessing import (
 )
 from sklearn.base import BaseEstimator, TransformerMixin
 
-
 class FeatureSet:
     """
     Class that encapsulates a set of features. A set of features is a subset of the columns in a Dateset object. 
@@ -49,7 +48,7 @@ class DataSet:
         self.created_features = False
         self.created_y_targets = False
 
-        self.scaling_dict = group_params.scaling_dict
+        self.scaling_dict = group_params.get_scaling_dict()
     
     def initialize_group_params(self):
         self.group_params.X_cols = set() 
@@ -299,10 +298,13 @@ def get_stock_data(
     df = pd.DataFrame()
     if end_date:
         df = yf.download([ticker], start=start_date, end=end_date, interval=interval)
+        vix = yf.download(["^VIX"], start=start_date, end=end_date, interval=interval)
     else:
         df = yf.download([ticker], start=start_date, interval=interval)
+        vix = yf.download(["^VIX"], start=start_date, interval=interval)
 
     df = df.drop(columns="Adj Close")
+    df['Vix'] = vix['High']
     # Standard column names needed for pandas-ta
     df = df.rename(
         columns={

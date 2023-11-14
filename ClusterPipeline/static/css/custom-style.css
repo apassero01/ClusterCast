@@ -1,0 +1,112 @@
+/* Custom Style Sheet for ClusterCast */
+/* Reset some basic elements for consistency */
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed,
+figure, figcaption, footer, header, hgroup,
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-size: 100%;
+	font: inherit;
+	vertical-align: baseline;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* HTML5 display-role reset for older browsers */
+article, aside, details, figcaption, figure,
+footer, header, hgroup, menu, nav, section {
+	display: block;
+}
+
+body {
+	line-height: 1;
+}
+
+ol, ul {
+	list-style: none;
+}
+/* Use a more modern font and adjust base styling */
+body, html {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #000000f1;
+}
+
+/* Style the header for a sleeker look */
+.header {
+    background-color: #020202; /* A fresh blue shade */
+    color: #fff;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+/* Responsive layout adjustments */
+.main-content {
+    display: flex;
+    flex-direction: row; /* Align children horizontally */
+    height: calc(100% - 50px); /* Adjust based on header height */
+}
+
+
+/* Style adjustments for a cleaner layout */
+.option-container {
+    margin-bottom: 20px;
+}
+
+/* Style the input and select elements for a consistent look */
+input[type="text"], input[type="date"], input[type="number"], select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-top: 5px;
+}
+
+/* Hover and focus effects for buttons and inputs */
+.button:hover, .button:focus {
+    background-color: #0056b3;
+    color: #fff;
+    outline: none;
+}
+
+input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus, select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    outline: none;
+}
+
+/* Style for active and hover states in select elements */
+select option:hover, select option:active {
+    background-color: #007bff;
+    color: #fff;
+}
+
+/* Smooth transitions for interactive elements */
+input, select, .button {
+    transition: all 0.3s ease;
+}
+
+

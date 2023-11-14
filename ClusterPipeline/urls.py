@@ -19,4 +19,6 @@ from . import views
 
 urlpatterns = [
     path("", views.home, name="ClusterCast-home"),
+    path("cluster-run/", views.cluster_run, name="ClusterCast-cluster-run"),
+    path("cluster-group/", views.cluster_group, name="ClusterCast-cluster-group"),
 ]

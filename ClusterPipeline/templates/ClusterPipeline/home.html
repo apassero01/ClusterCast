@@ -1,3 +1,5 @@
+{% load static %}
+{% extends 'ClusterPipeline/base.html'}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,19 +8,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+    <!-- Added custom CSS for improved visual appearance -->
+    <link href="{% static 'css/custom-style.css' %}" rel="stylesheet">
+
     <title>ClusterCast - Home</title>
     <style>
-        body, html {
-            height: 100%;
+        .header h1 {
             margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-        }
-        .header {
-            background-color: #333;
-            color: white;
-            text-align: center;
-            padding: 10px 0;
+            font-size: 1.8rem;
         }
         .main-content {
             display: flex;
@@ -31,11 +31,14 @@
         /* Style the input box */
         .input-box {
             width: 25%; /* One third of the container width */
-            background-color: #000; /* Black background */
+            background-color: #aaaaaa; /* Black background */
             color: white; /* White text color */
             padding: 20px;
             box-sizing: border-box;
             overflow-y: auto; /* Add scroll for overflow */
+            margin: 10px;
+            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.1),
+                        inset 0 -4px 8px rgba(0, 0, 0, 0.1);
         }
         
         /* Style the data visualization box */
@@ -77,39 +80,8 @@
             margin: 20px 0 0; /* Only margin-top */
             cursor: pointer;
         }
-        select, input[type="text"], input[type="date"], input[type="number"] {
-            width: 100%; /* Take up the full container width */
-            padding: 5px;
-            margin-top: 5px; /* Add some space above */
-        }
-        input[type="checkbox"] {
-            margin-top: 5px; /* Align with labels */
-        }
         label {
             display: block; /* Ensure labels take up their own line */
-        }
-        .figure-container {
-            flex: 1 1 48%; 
-            margin: 1%; /* Spacing between figure containers */
-            box-sizing: border-box;
-            min-width: calc(50% - 10px); /* Adjust this value to fit two graphs per row, accounting for the gap */
-            max-width: calc(50% - 10px); 
-        }
-
-        .figure-pair-container {
-        display: flex;
-        flex-wrap: nowrap; /* Prevent figures from wrapping */
-        justify-content: space-between; /* Space out the figures */
-        width: 100%; /* Take up the full width of the data-visualization container */
-        }
-
-        /* Flex container to hold figures in a row */
-        .figure-row {
-            display: flex;
-            flex-wrap: wrap; /* Allows items to wrap onto the next line */
-            justify-content: space-around; /* Distributes space around items */
-            align-items: flex-start; /* Aligns items at the top of the container */
-            gap: 10px; /* Spacing between items */
         }
     </style>
 </head>
@@ -149,21 +121,41 @@
             </div>
             <div class="option-container">
                 <label for="cluster_features">Cluster Features:</label>
-                <input type="text" id="cluster_features" name="cluster_features">
+                <select id="cluster_features" name="cluster_features" multiple size="5">
+                    {% for feature in cluster_features_list %}
+                        <option value="{{ feature }}">{{ feature }}</option>
+                    {% endfor %}
+                </select>
             </div>
+            <div class="option-container">
+                <label for="training_features">Training Features:</label>
+                <select id="training_features" name="training_features" multiple size="5">
+                    <option value="PctChgVars">PctChgVars</option>
+                    <option value="CumulativeVars">CumulativeVars</option>
+                    <option value="Rolling_vars">rolling_vars</option>
+                    <option value="PriceVars">PriceVars</option>
+                    <option value="TrendVars">TrendVars</option>
+
+                    <!-- More options can be added here -->
+                </select>
+            </div>
+            <!-- 
             <div class="option-container">
                 <label for="target_features">Target Features:</label>
                 <input type="text" id="target_features" name="target_features">
             </div>
-
+            -->
 
             <!-- Submit Button -->
             <button class="button" onclick="sendPostRequest()">Create Cluster Run</button>
         </div>
         <div class="data-visualization">
-            <h2>Data Visualization</h2>
-            <p>Placeholder for data visualization</p>
-        
+            <div class="graph-container">
+                <!-- Placeholder for the graph -->
+            </div>
+            <div class="text-data-container">
+                <!-- Placeholder for the text data -->
+            </div>
         </div>
 
     <script>
@@ -171,35 +163,48 @@
 
         function sendPostRequest() {
     
-          // Initialize an object to store the form values
-          let formData = {};
-      
-          // Collect value from the text input
-          formData['tickers'] = document.getElementById('tickers').value;
-      
-          // Collect values from the date inputs
-          formData['start_date'] = document.getElementById('start_date').value;
-          formData['end_date'] = document.getElementById('end_date').value;
-      
-          // Collect value from the number input
-          formData['steps'] = document.getElementById('steps').value;
-      
-          // Collect values from the checkboxes
-          formData['interval'] = document.getElementById('interval').value;
-          formData['cluster_features'] = document.getElementById('cluster_features').value;
-          formData['target_features'] = document.getElementById('target_features').value;
+            // Initialize an object to store the form values
+            let formData = {};
         
-          // Send a POST request with the collected data
-          let dataVisContainer = document.querySelector('.data-visualization');
-          fetch('', {
+            // Collect value from the text input
+            formData['tickers'] = document.getElementById('tickers').value;
+        
+            // Collect values from the date inputs
+            formData['start_date'] = document.getElementById('start_date').value;
+            formData['end_date'] = document.getElementById('end_date').value;
+        
+            // Collect value from the number input
+            formData['steps'] = document.getElementById('steps').value;
+        
+            // Collect values from the checkboxes
+            formData['interval'] = document.getElementById('interval').value;
+            let selectedFeatures = [];
+            let selectedOptions = document.getElementById('cluster_features').selectedOptions;
+            for (let option of selectedOptions) {
+                selectedFeatures.push(option.value);
+            }
+            formData['cluster_features'] = selectedFeatures;
+            
+            selectedFeatures = [];
+            selectedOptions = document.getElementById('training_features').selectedOptions;
+            for (let option of selectedOptions) {
+                selectedFeatures.push(option.value);
+            }
+            formData['training_features'] = selectedFeatures;
+            
+            //formData['target_features'] = document.getElementById('target_features').value;
+        
+            // Send a POST request with the collected data
+            let dataVisContainer = document.querySelector('.data-visualization');
+            fetch('', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken
-              // Include additional headers as required by your endpoint
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+                // Include additional headers as required by your endpoint
             },
             body: JSON.stringify(formData)
-          })
+            })
             .then(response => response.json())
             .then(data => {
                 dataVisContainer.innerHTML = '';
@@ -224,6 +229,19 @@
             .catch(error => console.error('Error:', error));
         }
     </script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#cluster_features').select2();
+        });
+    </script>
+    <script>
+        $(document).ready(function() {
+            $('#training_features').select2();
+        });
+    </script>
+    
       
 </body>
 </html>

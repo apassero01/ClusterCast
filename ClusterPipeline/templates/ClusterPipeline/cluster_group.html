@@ -1,0 +1,72 @@
+{% extends 'ClusterPipeline/base.html' %}
+{% load static %}
+
+{% block extrahead %}
+    <link rel="stylesheet" href="{% static 'css/visualization_styles.css' %}">
+    <!-- Include any additional CSS or JS specific to cluster_group.html -->
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+    <style>
+        .parent-container {
+            display: flex;
+            flex-direction: row; /* Align children horizontally */
+            height: calc(100% - 50px); /* Adjust based on header height */
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Left side content styles (if exists) */
+        .left-content {
+            width: 25%;
+            /* additional styles */
+        }
+        .data-visualization {
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            width: 75%; /* Full width of the parent */
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto; /* Vertical scroll for overflow */
+        }
+    </style>
+{% endblock extrahead %}
+
+{% block content %}
+    <!-- Include the cluster visualization template -->
+
+    <div class="parent-container">
+        <!-- Left side content (if exists) -->
+        <div class="left-content">
+            <!-- Other content goes here -->
+            <button id="loadDataButton">Load Data</button>
+        </div>
+    
+        <!-- Data visualization container -->
+        <div class="data-visualization">
+            <!-- Include the cluster visualization template -->
+            {% include 'ClusterPipeline/cluster_visualization.html' %}
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loadDataButton').addEventListener('click', function() {
+            // Make a POST request to the server
+            fetch('', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Additional headers here
+                },
+                body: JSON.stringify({ /* Your request body data */ })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data)
+                console.log(typeof data)
+                // Call the renderVisualization function with the response data
+                renderVisualization(data);
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+{% endblock content %}

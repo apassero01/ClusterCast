@@ -1,0 +1,67 @@
+<!-- data_visualization_template.html -->
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+
+{% block content %}
+<div class="graph-text-pair-container">
+    <div class="text-data-container">
+        <!-- Text content goes here -->
+    </div>
+    <div class="graph-container">
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.16.2.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/css-element-queries/1.2.3/ResizeSensor.js"></script>
+<script>
+function renderVisualization(data) {
+    // Select the existing 'data-visualization' container from the implementing file
+    let dataVisualizationContainer = document.querySelector('.data-visualization');
+
+    // Ensure the 'data-visualization' container exists
+    if (dataVisualizationContainer) {
+        // Clear the container before adding new content
+        dataVisualizationContainer.innerHTML = '';
+
+        // Iterate over each data result pair
+        data.results.forEach(pair => {
+            const [fig, metrics] = pair;
+
+            // Create the container for the graph-text pair
+            let pairContainer = document.createElement('div');
+            pairContainer.classList.add('graph-text-pair-container');
+            // Append the pair container to the 'data-visualization' container
+            dataVisualizationContainer.appendChild(pairContainer);
+
+            // Create the container for the graph
+            let graphContainer = document.createElement('div');
+            graphContainer.classList.add('graph-container');
+
+            // Append the graph container to the pair container
+            pairContainer.appendChild(graphContainer);
+
+            // Render the figure using Plotly
+            Plotly.newPlot(graphContainer, fig.data, fig.layout, {responsive: true});
+
+            // Create the container for the text
+            let textContainer = document.createElement('div');
+            textContainer.classList.add('text-data-container');
+            pairContainer.appendChild(textContainer);
+
+            // Create a paragraph for the metrics and append to text container
+            let p = document.createElement('p');
+            p.textContent = metrics;
+            textContainer.appendChild(p);
+
+        });
+    } else {
+        console.error('data-visualization container not found');
+    }
+}
+
+
+
+
+</script>
+{% endblock %}

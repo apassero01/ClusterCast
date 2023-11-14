@@ -212,6 +212,7 @@ class StockSequenceSet(SequenceSet):
             for pct_Chg_feauture in pct_Chg_feautures:
                 cuma_feature_set = self.add_cuma_pctChg_features(pct_Chg_feauture)
                 self.group_params.X_feature_sets.append(cuma_feature_set)
+                self.group_params.X_cols.update(cuma_feature_set.cols)
 
 
 
