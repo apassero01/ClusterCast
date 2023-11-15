@@ -23,6 +23,66 @@
     /* Adjust padding or margin as needed */
 }
 
+.text-data-container h3 {
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.text-data-container p {
+    margin: 2px 0;
+    font-size: 0.9rem;
+}
+
 .preserve-whitespace {
     white-space: pre-wrap; /* Preserves whitespace and wraps text */
+}
+
+.metrics-card {
+    background-color: #f9f9f9;
+    border-left: 5px solid #4CAF50; /* Color indicates metric type */
+    margin: 10px 0;
+    padding: 10px 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.metrics-card:hover {
+    background-color: #e9e9e9;
+}
+
+.metrics-card p {
+    margin: 0;
+    color: #333;
+    font-size: 1rem;
+}
+
+.metrics-card span {
+    font-weight: bold;
+}
+.text-data-container {
+    font-family: Arial, sans-serif; /* A clean, readable font */
+}
+
+.summary-line {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333; /* Dark text for emphasis */
+}
+
+.step-line {
+    margin: 5px 0;
+    font-size: 0.9rem;
+    color: #555; /* Slightly lighter for detailed info */
+}
+
+.step-line .percentage {
+    font-weight: bold;
+    color: #008800; /* Green for percentages */
+}
+
+.step-line .num {
+    color: #000088; /* Blue for numerical values */
 }

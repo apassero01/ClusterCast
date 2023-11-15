@@ -226,7 +226,7 @@ class StockClusterGroup(ClusterGroup):
 
         train_labels = np.unique([x.cluster_label for x in train_seq_elements])
 
-        self.clusters = [] 
+        self.clusters = []
 
         for label in train_labels:
             cur_train_seq_elements = [x for x in train_seq_elements if x.cluster_label == label]
@@ -287,6 +287,11 @@ class StockClusterGroup(ClusterGroup):
     def get_3d_array(self): 
         self.X_train, self.y_train, self.X_test, self.y_test = self.sequence_set.get_3d_array()
         return self.X_train, self.y_train, self.X_test, self.y_test
+    
+    def load_saved_clusters(self):
+        self.clusters = StockCluster.objects.filter(cluster_group = self)
+
+
 
 
 class Cluster(models.Model):
@@ -299,7 +304,20 @@ class Cluster(models.Model):
     def initialize(self,train_seq_elements,test_seq_elements):
         self.train_seq_elements = train_seq_elements
         self.test_seq_elements = test_seq_elements
+        for seq_element in train_seq_elements:
+            if seq_element.cluster is not None:
+                break
+            seq_element.cluster = self
+            seq_element.save()
+        for seq_element in test_seq_elements:
+            if seq_element.cluster is not None:
+                break
+            seq_element.cluster = self
+            seq_element.save()
         self.get_3d_array()
+    
+    def load_saved_sequences(self):
+        self.deserialize_elements()
         
     def get_3d_array(self):
         if len(self.train_seq_elements) == 0 or len(self.test_seq_elements) == 0:
@@ -311,33 +329,45 @@ class Cluster(models.Model):
     
     def serialize(self):
         group_name = self.cluster_group.group_params.name
-        item_dict = {
-            "train_seq_elements": self.train_seq_elements,
-            "test_seq_elements": self.test_seq_elements,
-        }
-        self.elements_file_string = f"SavedModels/{group_name}/Cluster{self.label}Elements.pkl"
-        self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}Model.pkl"
+        elements_dir_string = f"SavedModels/{group_name}/Cluster{self.label}/Elements/"
 
+    
+        
+        for element in self.train_seq_elements + self.test_seq_elements:
+            element_string = elements_dir_string+"element"+str(element.id)+"/"
+            if not os.path.exists(element_string):
+                os.makedirs(element_string)
 
-        directory1 = os.path.dirname(self.elements_file_string)
-        directory2 = os.path.dirname(self.model_file_string)
+            element.seq_x_scaled_path = element_string + "X_scaled.npy"
+            element.seq_y_scaled_path = element_string + "y_scaled.npy"
+
+            np.save(element.seq_x_scaled_path, element.seq_x_scaled)
+            np.save(element.seq_y_scaled_path, element.seq_y_scaled)
+
+            element.save()
+
+        self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}/Model/"
+
 
         # Check if the directory exists
-        if not os.path.exists(directory1):
+        if not os.path.exists(self.model_file_string):
             # Create the directory if it doesn't exist
-            os.makedirs(directory1)
+            os.makedirs(self.model_file_string)
 
-        with open(directory1, 'wb') as f:
-            pickle.dump(item_dict, f)
-        with open(directory2, 'wb') as f:
+        with open(self.model_file_string+"Model.pkl", 'wb') as f:
             pickle.dump(self.model, f)
     
     def deserialize_elements(self):
-        with open(self.elements_file_string, 'rb') as f:
-            item_dict = pickle.load(f)
-        
-        self.train_seq_elements = item_dict["train_seq_elements"]
-        self.test_seq_elements = item_dict["test_seq_elements"]
+        seq_elements = self.sequence_elements.all()
+
+        for element in seq_elements:
+            x_path = element.seq_x_scaled_path
+            y_path = element.seq_y_scaled_path
+            element.seq_x_scaled = np.load(x_path)
+            element.seq_y_scaled = np.load(y_path)
+
+        self.train_seq_elements = [x for x in seq_elements if x.isTrain]
+        self.test_seq_elements = [x for x in seq_elements if not x.isTrain]
 
         self.get_3d_array()
     
@@ -352,6 +382,9 @@ class StockCluster(Cluster):
         pass
 
     def visualize_cluster(self, isTrain = True, y_range = [-5,5]):
+        if not hasattr(self, 'train_seq_elements') or not hasattr(self, 'test_seq_elements'):
+            self.load_saved_sequences()
+
         if isTrain:
             arr_3d = self.X_train
         else:
@@ -391,6 +424,8 @@ class StockCluster(Cluster):
         '''
         Create a scatter plot of the target values for the cluster using Plotly
         '''
+        if self.train_seq_elements is None or self.test_seq_elements is None:
+            self.load_saved_sequences()
         target_vals = self.y_train
 
         num_elements = len(target_vals)
@@ -474,6 +509,8 @@ class StockCluster(Cluster):
 
             step_result.dir_accuracy = accuracy
             step_result.weighted_dir_acc = w_accuracy
+            step_result.predicted_return = results[f'predicted_{i+1}'].mean()
+            step_result.actual_return = results[f'real_{i+1}'].mean()
             step_result.save()
 
             output_string += (
@@ -495,12 +532,23 @@ class StockCluster(Cluster):
                 result.delete()
         self.num_results = len(self.step_results)
     
-    def generate_results_string(self):
-        string = "Train Set Length: " + str(len(self.X_train)) + " Test Set Length: " + str(len(self.y_test)) + "\n"
+    def generate_results(self):
+        results = {
+            "train_set_length": len(self.X_train),
+            "test_set_length": len(self.y_test),
+            "cluster_label": self.label,
+            "step_accuracy": [],
+            "step_accuracy_weighted": [],
+            "step_predicted_return": [],
+            "step_actual_return": [],
+        }
         self.step_results = self.cluster_results.all()
         for result in self.step_results:
-            string += result.get_results_string()
-        return string
+            results["step_accuracy"].append(result.dir_accuracy)
+            results["step_accuracy_weighted"].append(result.weighted_dir_acc)
+            results["step_predicted_return"].append(result.predicted_return)
+            results["step_actual_return"].append(result.actual_return)
+        return results
     
 
 
@@ -580,8 +628,16 @@ class StepResult(models.Model):
     train_set_length = models.IntegerField(default=0)
     test_set_length = models.IntegerField(default=0)
 
-    def get_results_string(self):
-        return str(self.steps_in_future) +"Step, " + str(self.dir_accuracy) + "% Accuracy, " + str(self.weighted_dir_acc) + "% Weighted Accuracy, " + str(self.predicted_return) + " Predicted Return, " + str(self.actual_return) + " Actual Return\n"
+    def get_results(self):
+        step_results = {
+            "steps_in_future": self.steps_in_future,
+            "dir_accuracy": self.dir_accuracy,
+            "weighted_dir_acc": self.weighted_dir_acc,
+            "predicted_return": self.predicted_return,
+            "actual_return": self.actual_return,
+        }
+
+        return step_results
 
 
 

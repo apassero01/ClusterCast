@@ -116,14 +116,14 @@ def cluster_run(request):
 @csrf_exempt
 def cluster_group(request):
     if request.method == 'POST':
-        cluster_group = CP.StockClusterGroup.objects.get(pk=17)
+        cluster_group = CP.StockClusterGroup.objects.get(pk=21)
         
         cluster_results = [] 
+        cluster_group.load_saved_clusters()
         for cluster in cluster_group.clusters_obj.all(): 
-            cluster.deserialize_elements()
             fig1 = cluster.visualize_cluster()
             fig1_json = json.loads(plotly.io.to_json(fig1))
-            metrics = cluster.generate_results_string()
+            metrics = cluster.generate_results()
             cluster_results.append([fig1_json,metrics])
             # print(cluster_results[-1])
         

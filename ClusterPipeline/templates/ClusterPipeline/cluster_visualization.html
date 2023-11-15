@@ -45,20 +45,47 @@ function renderVisualization(data) {
             Plotly.newPlot(graphContainer, fig.data, fig.layout, {responsive: true});
 
             // Create the container for the text
-            let textContainer = document.createElement('div');
-            textContainer.classList.add('text-data-container');
-            pairContainer.appendChild(textContainer);
+            // let textContainer = document.createElement('div');
+            // textContainer.classList.add('text-data-container');
+            // pairContainer.appendChild(textContainer);
 
-            // Create a paragraph for the metrics and append to text container
-            let p = document.createElement('p');
-            p.textContent = metrics;
-            textContainer.appendChild(p);
+            // // Create a paragraph for the metrics and append to text container
+            // let p = document.createElement('p');
+            // p.textContent = metrics;
+            // textContainer.appendChild(p);
+            // text();
+            populateTextDataContainer(metrics,pairContainer);
 
         });
     } else {
         console.error('data-visualization container not found');
     }
 }
+function text(){
+    console.log("hello")
+}
+function populateTextDataContainer(results,pairContainer) {
+    let textContainer = document.createElement('div');
+    textContainer.classList.add('text-data-container');
+
+    // Display summary in a single line
+    let summary = `Train set length: ${results.train_set_length} | Test set length: ${results.test_set_length} | Cluster Number: ${results.cluster_label}`;
+    let summaryP = document.createElement('p');
+    summaryP.textContent = summary;
+    summaryP.classList.add('summary-line');
+    textContainer.appendChild(summaryP);
+
+    // Function to create and append step data
+    results.step_accuracy.forEach((acc, index) => {
+        let stepData = document.createElement('p');
+        stepData.innerHTML = `Step: ${index + 1} <span class="percentage">${Math.round(acc)}%</span> Weighted: <span class="percentage">${Math.round(results.step_accuracy_weighted[index])}%</span> | PredRet: <span class="num">${results.step_predicted_return[index]}</span> | ActRet: <span class="num">${results.step_actual_return[index]}</span>`;
+        stepData.classList.add('step-line');
+        textContainer.appendChild(stepData);
+    });
+
+    pairContainer.appendChild(textContainer);
+}
+
 
 
 

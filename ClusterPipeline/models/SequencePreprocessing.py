@@ -7,19 +7,24 @@ from datetime import datetime
 from enum import Enum
 from copy import deepcopy
 from collections import Counter
-
-class SequenceElement: 
-    def __init__(self,seq_x,seq_y,isTrain : bool, x_feature_dict, y_feature_dict,start_date, end_date,ticker) -> None:
+from django.db import models
+class SequenceElement(models.Model): 
+    seq_x_scaled_path = models.CharField(max_length=1000,default="")
+    seq_y_scaled_path = models.CharField(max_length=1000,default="")
+    isTrain = models.BooleanField(default=True)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    ticker = models.CharField(max_length=10)
+    n_steps = models.IntegerField(default=0)
+    cluster = models.ForeignKey('ClusterPipeline.StockCluster', on_delete=models.CASCADE, related_name='sequence_elements',default=None,null=True)
+        
+    def initialize(self,seq_x,seq_y, x_feature_dict, y_feature_dict):
         self.seq_x = seq_x
         self.seq_y = seq_y
 
         self.seq_x_scaled = deepcopy(seq_x)
         self.seq_y_scaled = deepcopy(seq_y)
 
-        self.isTrain = isTrain
-        self.start_date = start_date
-        self.end_date = end_date
-        self.ticker = ticker
         self.n_steps = len(seq_x)
         self.x_feature_dict = x_feature_dict
         self.y_feature_dict = y_feature_dict
@@ -426,7 +431,8 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
         start_date = dates[i]
         end_date = dates[end_idx - 1]
 
-        sequence_element = SequenceElement(seq_x, seq_y, isTrain, X_feature_dict, y_feature_dict, start_date, end_date,ticker)
+        sequence_element = SequenceElement.objects.create(isTrain = isTrain, start_date = start_date, end_date = end_date, ticker = ticker, n_steps = n_steps)
+        sequence_element.initialize(seq_x, seq_y, X_feature_dict, y_feature_dict)
 
         sequence_elements.append(sequence_element)
         
