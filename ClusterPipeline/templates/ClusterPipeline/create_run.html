@@ -7,20 +7,203 @@
     <!-- Additional scripts specific to this page -->
     <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="{% static 'css/visualization_styles.css' %}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <style>
+        .input-box {
+            width: 25%; /* One third of the container width */
+            background-color: #aaaaaa; /* Black background */
+            color: white; /* White text color */
+            padding: 10px;
+            box-sizing: border-box;
+            overflow-y: auto; /* Add scroll for overflow */
+            margin: 10px;
+            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.1),
+                        inset 0 -4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .button, input, select {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%; /* Take up the full container width */
+        }
+
+        .option-container {
+            display: flex; /* Use flexbox layout */
+            align-items: center; /* Align items vertically in the center */
+            margin-bottom: 0px; /* Add some space between each form group */
+            justify-content: flex-start;
+        }
+        .option-container label {
+            flex-shrink: 0; /* Prevent the label from shrinking */
+            margin-right: 10px; /* Space between label and input */
+            white-space: nowrap; /* Prevent labels from wrapping */
+        }
+        .option-container input[type="text"], 
+        .option-container input[type="date"], 
+        .option-container input[type="number"] 
+        .option-container select{
+            flex-grow: 1; /* Allow the input to grow and fill available space */
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            /* Define a fixed width for the inputs or use flex-basis */
+            flex-basis: 120px; /* Adjust this value to set the initial width */
+        }
+        .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: block; /* Take up the full container width */
+            margin: 20px 0 0; /* Only margin-top */
+            cursor: pointer;
+        }
+        label {
+            display: block; /* Ensure labels take up their own line */
+        }
+    </style>
 {% endblock extrahead %}
 
 {% block content %}
-<div class="main-content">
-    <!-- Your input-box and data-visualization divs -->
-    <!-- ... -->
+
+<div class="input-box">
+    <!-- Text Input -->
+    <div class="option-container">
+        <label for="Number">Tickers:</label>
+        <input type="text" id="tickers" name="tickers">
+    </div>
+
+    <!-- Date Inputs -->
+    <div class="option-container">
+        <label for="start_date">Start:</label>
+        <input type="date" id="start_date" name="start_date">
+    </div>
+    <div class="option-container">
+        <label for="end_date">End:</label>
+        <input type="date" id="end_date" name="end_date">
+    </div>
+
+    <!-- Number Input -->
+    <div class="option-container">
+        <label for="steps">Steps:</label>
+        <input type="number" id="steps" name="steps">
+    </div>
+
+    <!-- Checkboxes -->
+    <div class="option-container">
+        <label for="interval">Interval:</label>
+        <input type="text" id="interval" name="interval">
+    </div>
+    <div class="option-container">
+        <label for="cluster_features">Cluster Features:</label>
+        <select id="cluster_features" name="cluster_features" multiple size="5">
+            {% for feature in cluster_features_list %}
+                <option value="{{ feature }}">{{ feature }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="option-container">
+        <label for="training_features">Training Features:</label>
+        <select id="training_features" name="training_features" multiple size="5">
+            <option value="PctChgVars">PctChgVars</option>
+            <option value="CumulativeVars">CumulativeVars</option>
+            <option value="Rolling_vars">rolling_vars</option>
+            <option value="PriceVars">PriceVars</option>
+            <option value="TrendVars">TrendVars</option>
+
+            <!-- More options can be added here -->
+        </select>
+    </div>
+    <!-- 
+    <div class="option-container">
+        <label for="target_features">Target Features:</label>
+        <input type="text" id="target_features" name="target_features">
+    </div>
+    -->
+
+    <!-- Submit Button -->
+    <button class="button" onclick="sendPostRequest()">Create Cluster Run</button>
 </div>
 
+<div class="data-visualization">
+    <!-- Include the cluster visualization template -->
+    {% include 'ClusterPipeline/cluster_visualization.html' %}
+</div>
+
+
 <!-- Additional scripts for this page -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <script>
-    // Your existing JavaScript code
-    // ...
+    let csrfToken = document.getElementById('csrfToken').value;
+
+    function sendPostRequest() {
+        // clear the data visualization container
+        let dataVisContainer = document.querySelector('.data-visualization');
+        dataVisContainer.innerHTML = '';
+        showLoader();
+        // Initialize an object to store the form values
+        let formData = {};
+    
+        // Collect value from the text input
+        formData['tickers'] = document.getElementById('tickers').value;
+    
+        // Collect values from the date inputs
+        formData['start_date'] = document.getElementById('start_date').value;
+        formData['end_date'] = document.getElementById('end_date').value;
+    
+        // Collect value from the number input
+        formData['steps'] = document.getElementById('steps').value;
+    
+        // Collect values from the checkboxes
+        formData['interval'] = document.getElementById('interval').value;
+        let selectedFeatures = [];
+        let selectedOptions = document.getElementById('cluster_features').selectedOptions;
+        for (let option of selectedOptions) {
+            selectedFeatures.push(option.value);
+        }
+        formData['cluster_features'] = selectedFeatures;
+        
+        selectedFeatures = [];
+        selectedOptions = document.getElementById('training_features').selectedOptions;
+        for (let option of selectedOptions) {
+            selectedFeatures.push(option.value);
+        }
+        formData['training_features'] = selectedFeatures;
+        
+        //formData['target_features'] = document.getElementById('target_features').value;
+    
+        // Send a POST request with the collected data
+        fetch('', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+            // Include additional headers as required by your endpoint
+        },
+        body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Call the renderVisualization function with the response data
+            renderVisualization(data);
+        })
+        .catch(error => console.error('Error:', error))
+        .finally(() => hideLoader());
+    }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#cluster_features').select2();
+    });
+</script>
+<script>
+    $(document).ready(function() {
+        $('#training_features').select2();
+    });
 </script>
 {% endblock %}

@@ -7,6 +7,5 @@ admin.site.register(CP.StockClusterGroup)
 admin.site.register(CP.StockCluster)
 admin.site.register(CP.SupportedParams)
 admin.site.register(CP.StepResult)
-admin.site.register(SP.SequenceElement)
 
 # Register your models here.

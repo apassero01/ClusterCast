@@ -14,7 +14,9 @@ from kneed import KneeLocator
 import matplotlib.pyplot as plt
 import pickle
 from django.db import models
+from tensorflow.keras.backend import clear_session
 import os
+import sys
 
 
 class SupportedParams(models.Model):
@@ -23,6 +25,12 @@ class SupportedParams(models.Model):
     """
     features = models.JSONField(default=list)
     name = models.CharField(max_length=100,default="")
+
+    pct_chg_features = models.JSONField(default=list)
+    rolling_features = models.JSONField(default=list)
+    trend_features = models.JSONField(default=list)
+    price_features = models.JSONField(default=list)
+    cuma_features = models.JSONField(default=list)
 
     def generate_features(self):
         tickers = ['spy']
@@ -45,6 +53,35 @@ class SupportedParams(models.Model):
         cluster_group.create_sequence_set()
 
         self.features = list(cluster_group.sequence_set.group_params.X_cols)
+    
+    def generate_features_by_type(self):
+        tickers = ['spy']
+        start = '2020-01-01'
+        target_cols = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
+        n_steps = 2
+        interval = '1d'
+        cluster_features = ['pctChgclose_cumulative']
+        group_params = StockClusterGroupParams(start_date = start, tickers = tickers, interval = interval, target_cols = target_cols, n_steps = n_steps,cluster_features = cluster_features)
+        group_params.scaling_dict = {
+                    'price_vars': ScalingMethod.SBSG,
+                    'trend_vars' : ScalingMethod.SBS,
+                    'pctChg_vars' : ScalingMethod.QUANT_MINMAX,
+                    'rolling_vars' : ScalingMethod.QUANT_MINMAX_G,
+                    'target_vars' : ScalingMethod.UNSCALED
+                    }
+        cluster_group = StockClusterGroup()
+        cluster_group.set_group_params(group_params)
+        cluster_group.create_data_set()
+        cluster_group.create_sequence_set()
+
+        self.pct_chg_features = next(filter(lambda feature_set: feature_set.name == 'pctChg_vars', cluster_group.group_params.X_feature_sets)).cols
+        self.cuma_features = next((filter(lambda feature_set: "cum" in feature_set.name, cluster_group.group_params.X_feature_sets))).cols
+        self.price_features = next((filter(lambda feature_set: "price" in feature_set.name, cluster_group.group_params.X_feature_sets))).cols
+        self.trend_features = next((filter(lambda feature_set: "trend" in feature_set.name, cluster_group.group_params.X_feature_sets))).cols
+
+        rolling_feat= list((filter(lambda feature_set: "rolling" in feature_set.name, cluster_group.group_params.X_feature_sets)))
+        for feature in rolling_feat: 
+            self.rolling_features += feature.cols
 
 class ClusterGroupParams(models.Model): 
     start_date = models.DateField()
@@ -81,6 +118,7 @@ class StockClusterGroupParams(ClusterGroupParams):
     target_cols = models.JSONField(default=list)
     interval = models.CharField(max_length=10)
     cluster_features = models.JSONField(default=list)
+    training_features = models.JSONField(default=list)
 
         # self.scaling_dict = {
         #     'price_vars': ScalingMethod.SBSG,
@@ -137,6 +175,9 @@ class StockClusterPeriod(ClusterPeriod):
 
 class ClusterGroup(models.Model): 
     n_clusters = models.IntegerField(default=0)
+    train_labels = models.JSONField(default=list)
+    test_labels = models.JSONField(default=list)
+
     class Meta:
         abstract = True
         
@@ -164,7 +205,7 @@ class StockClusterGroup(ClusterGroup):
         self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
         self.group_params = self.sequence_set.group_params
     
-    def run_clustering(self,alg = 'TSKM',metric = "euclidean"):
+    def run_clustering(self,alg = 'TSKM',metric = "dtw"):
         
         self.get_3d_array()
         X_train_cluster = self.filter_by_features(self.X_train, self.group_params.cluster_features)
@@ -178,10 +219,14 @@ class StockClusterGroup(ClusterGroup):
         if alg == 'TSKM':
             # n_clusters = self.determine_n_clusters(X_train_cluster,metric)
             n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 3
+            # n_clusters = 1
             self.cluster_alg = TimeSeriesKMeans(n_clusters=n_clusters, metric=metric,random_state=3)
         
-        self.train_labels = self.cluster_alg.fit_predict(X_train_cluster)
-        self.test_labels = self.cluster_alg.predict(X_test_cluster)
+        self.train_labels = list(self.cluster_alg.fit_predict(X_train_cluster))
+        self.test_labels = list(self.cluster_alg.predict(X_test_cluster))
+
+        self.train_labels = [int(x) for x in self.train_labels]
+        self.test_labels = [int(x) for x in self.test_labels]
 
         train_seq_elements = self.group_params.train_seq_elements
         test_seq_elements = self.group_params.test_seq_elements
@@ -224,7 +269,7 @@ class StockClusterGroup(ClusterGroup):
         train_seq_elements = self.group_params.train_seq_elements
         test_seq_elements = self.group_params.test_seq_elements
 
-        train_labels = np.unique([x.cluster_label for x in train_seq_elements])
+        train_labels = np.unique([self.train_labels])
 
         self.clusters = []
 
@@ -259,7 +304,9 @@ class StockClusterGroup(ClusterGroup):
             if cluster.num_results > 0:
                 self.filtered_clusters.append(cluster)
                 cluster.serialize()
-                cluster.save() 
+                cluster.save()
+                del cluster.model
+                cluster.model = None
             else: 
                 cluster.delete()
 
@@ -275,7 +322,7 @@ class StockClusterGroup(ClusterGroup):
         self.general_model = create_model(len(model_features))
         
         self.general_model.fit(X_train, y_train, epochs=100, batch_size=16, validation_data=(X_test, y_test), verbose=1)
-
+        clear_session()
 
 
     def filter_by_features(self,seq, feature_list):
@@ -291,6 +338,49 @@ class StockClusterGroup(ClusterGroup):
     def load_saved_clusters(self):
         self.clusters = StockCluster.objects.filter(cluster_group = self)
 
+    def generate_new_group(self):
+        try: 
+            model_features = self.group_params.training_features;
+            self.create_data_set()
+            self.create_sequence_set()
+            self.run_clustering()
+            self.create_clusters()
+            self.train_all_rnns(model_features=model_features)
+        except Exception as e:
+            print("Error in generating new group")
+            print(e)
+            if len(self.clusters) != 0: 
+                for cluster in self.clusters:
+                    cluster.delete()
+            sys.exit(1)
+        self.save()
+    
+    def load_saved_group(self):
+        self.create_data_set()
+        self.create_sequence_set() 
+        self.load_saved_clusters()
+
+        train_seq_elements = self.group_params.train_seq_elements
+        test_seq_elements = self.group_params.test_seq_elements
+
+        for i in range(len(train_seq_elements)):
+            seq_element = train_seq_elements[i]
+            seq_element.cluster_label = self.train_labels[i]
+        for i in range(len(test_seq_elements)):
+            seq_element = test_seq_elements[i]
+            seq_element.cluster_label = self.test_labels[i]
+
+
+        self.clusters = StockCluster.objects.filter(cluster_group = self)
+
+        for cluster in self.clusters:
+            cluster_label = cluster.label
+            cur_train_seq_elements = [x for x in train_seq_elements if x.cluster_label == cluster_label]
+            cur_test_seq_elements = [x for x in test_seq_elements if x.cluster_label == cluster_label]
+            cluster.initialize(cur_train_seq_elements,cur_test_seq_elements)
+
+        
+
 
 
 
@@ -304,49 +394,22 @@ class Cluster(models.Model):
     def initialize(self,train_seq_elements,test_seq_elements):
         self.train_seq_elements = train_seq_elements
         self.test_seq_elements = test_seq_elements
-        for seq_element in train_seq_elements:
-            if seq_element.cluster is not None:
-                break
-            seq_element.cluster = self
-            seq_element.save()
-        for seq_element in test_seq_elements:
-            if seq_element.cluster is not None:
-                break
-            seq_element.cluster = self
-            seq_element.save()
         self.get_3d_array()
-    
-    def load_saved_sequences(self):
-        self.deserialize_elements()
-        
+
     def get_3d_array(self):
         if len(self.train_seq_elements) == 0 or len(self.test_seq_elements) == 0:
             raise ValueError("No sequences in this cluster")
         
         self.X_train, self.y_train = SequenceElement.create_array(self.train_seq_elements)
         self.X_test, self.y_test = SequenceElement.create_array(self.test_seq_elements)
+
         return self.X_train, self.y_train, self.X_test, self.y_test
     
+
     def serialize(self):
         group_name = self.cluster_group.group_params.name
-        elements_dir_string = f"SavedModels/{group_name}/Cluster{self.label}/Elements/"
-
     
-        
-        for element in self.train_seq_elements + self.test_seq_elements:
-            element_string = elements_dir_string+"element"+str(element.id)+"/"
-            if not os.path.exists(element_string):
-                os.makedirs(element_string)
-
-            element.seq_x_scaled_path = element_string + "X_scaled.npy"
-            element.seq_y_scaled_path = element_string + "y_scaled.npy"
-
-            np.save(element.seq_x_scaled_path, element.seq_x_scaled)
-            np.save(element.seq_y_scaled_path, element.seq_y_scaled)
-
-            element.save()
-
-        self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}/Model/"
+        self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}/"
 
 
         # Check if the directory exists
@@ -382,8 +445,6 @@ class StockCluster(Cluster):
         pass
 
     def visualize_cluster(self, isTrain = True, y_range = [-5,5]):
-        if not hasattr(self, 'train_seq_elements') or not hasattr(self, 'test_seq_elements'):
-            self.load_saved_sequences()
 
         if isTrain:
             arr_3d = self.X_train
@@ -509,8 +570,8 @@ class StockCluster(Cluster):
 
             step_result.dir_accuracy = accuracy
             step_result.weighted_dir_acc = w_accuracy
-            step_result.predicted_return = results[f'predicted_{i+1}'].mean()
-            step_result.actual_return = results[f'real_{i+1}'].mean()
+            step_result.predicted_return = round(results[f'predicted_{i+1}'].mean(),2)
+            step_result.actual_return = round(results[f'real_{i+1}'].mean(),2)
             step_result.save()
 
             output_string += (
@@ -524,6 +585,8 @@ class StockCluster(Cluster):
         with open('output.txt', 'a') as f:
             f.write(output_string)
 
+        clear_session()
+
     
     def filter_results(self,threshhold = 0.2,test_set_length = 30):
         self.step_results = StepResult.objects.filter(cluster = self)
@@ -536,7 +599,7 @@ class StockCluster(Cluster):
         results = {
             "train_set_length": len(self.X_train),
             "test_set_length": len(self.y_test),
-            "cluster_label": self.label,
+            "cluster_label": int(self.label),
             "step_accuracy": [],
             "step_accuracy_weighted": [],
             "step_predicted_return": [],
@@ -544,10 +607,10 @@ class StockCluster(Cluster):
         }
         self.step_results = self.cluster_results.all()
         for result in self.step_results:
-            results["step_accuracy"].append(result.dir_accuracy)
-            results["step_accuracy_weighted"].append(result.weighted_dir_acc)
-            results["step_predicted_return"].append(result.predicted_return)
-            results["step_actual_return"].append(result.actual_return)
+            results["step_accuracy"].append(int(result.dir_accuracy))
+            results["step_accuracy_weighted"].append(int(result.weighted_dir_acc))
+            results["step_predicted_return"].append(float(result.predicted_return))
+            results["step_actual_return"].append(float(result.actual_return))
         return results
     
 

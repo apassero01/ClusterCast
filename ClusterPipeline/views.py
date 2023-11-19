@@ -9,6 +9,9 @@ import json
 import plotly.graph_objects as go
 import plotly
 from django.db import transaction
+from django.http import HttpResponse
+import ast
+from .thread import CreateGroupBackground
 
 
 # Create your views here.
@@ -110,17 +113,98 @@ def home(request):
     return render(request, 'ClusterPipeline/home.html',context)
 
 @csrf_exempt
+@transaction.atomic
 def cluster_run(request):
-    return render(request, 'ClusterPipeline/create_run.html')
+    supported_params = CP.SupportedParams.objects.get(pk=7)
+    cluster_features_list = supported_params.features
+    context = {
+        'cluster_features_list': cluster_features_list
+    }
+
+    if request.method == 'POST':
+        # Load the JSON data from the request body
+        data = json.loads(request.body)
+        print("req")
+        # Unpack the dictionary and do something with it
+        tickersString = data.get('tickers')
+        tickers = tickersString.split(',')
+        tickers = [ticker.strip() for ticker in tickers]
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        steps = int(data.get('steps'))
+        interval = (data.get('interval'))
+        cluster_features = data.get('cluster_features')
+        print(cluster_features)
+
+        target_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
+
+
+        print(target_features)
+        scaling_dict = {
+            'price_vars': SP.ScalingMethod.SBSG,
+            'trend_vars' : SP.ScalingMethod.SBS,
+            'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX,
+            'rolling_vars' : SP.ScalingMethod.QUANT_MINMAX_G,
+            'target_vars' : SP.ScalingMethod.UNSCALED
+        }
+
+        col_dict = {
+            "PctChgVars": supported_params.pct_chg_features,
+            "CumulativeVars": supported_params.cuma_features,
+            "RollingVars": supported_params.rolling_features,
+            "PriceVars": supported_params.price_features,
+            "TrendVars": supported_params.trend_features
+        }
+
+        training_selected_features = data.get("training_features")
+        training_features = []
+        for feature in training_selected_features:
+            training_features += col_dict[feature]
+
+        # Process the data (this is where you would include your logic)
+        group_params = CP.StockClusterGroupParams.objects.create(tickers = tickers, start_date = start_date, end_date = end_date, n_steps = steps, cluster_features = cluster_features, target_cols = target_features, interval=interval, training_features = training_features)
+        group_params.set_scaling_dict(scaling_dict)
+        group_params.initialize()
+        group_params.save() 
+        
+        CreateGroupBackground(group_params).start()
+
+        
+
+        return HttpResponse("Success")
+
+        cluster_results = [] 
+    
+        for cluster in cluster_group.clusters: 
+            fig1 = cluster.visualize_cluster()
+            fig1_json = json.loads(plotly.io.to_json(fig1))
+            metrics = cluster.generate_results()
+            cluster_results.append([fig1_json,metrics])
+            # cluster_results.append([metrics])
+
+        # print(cluster_graphs)
+        # Return a JSON response with a success message or the processed data
+        return JsonResponse({'results': cluster_results})
+
+    # If it's a GET request, just render the page as usual
+    return render(request, 'ClusterPipeline/create_run.html',context)
 
 @csrf_exempt
 def cluster_group(request):
+    cluster_group_list = CP.StockClusterGroup.objects.all()
+    item_list = [(item.pk, item.group_params.name) for item in cluster_group_list]
     if request.method == 'POST':
-        cluster_group = CP.StockClusterGroup.objects.get(pk=21)
+        data = json.loads(request.body)
+        group_data_string = (data['cluster_group'])
+        group_data = ast.literal_eval(group_data_string)
+        id = group_data[0]
+        print(id)
+
+        cluster_group = CP.StockClusterGroup.objects.get(pk=id)
         
         cluster_results = [] 
-        cluster_group.load_saved_clusters()
-        for cluster in cluster_group.clusters_obj.all(): 
+        cluster_group.load_saved_group()
+        for cluster in cluster_group.clusters: 
             fig1 = cluster.visualize_cluster()
             fig1_json = json.loads(plotly.io.to_json(fig1))
             metrics = cluster.generate_results()
@@ -128,4 +212,4 @@ def cluster_group(request):
             # print(cluster_results[-1])
         
         return JsonResponse({'results': cluster_results})
-    return render(request, 'ClusterPipeline/cluster_group.html')
+    return render(request, 'ClusterPipeline/cluster_group.html',{'menu_items': item_list})

@@ -21,6 +21,7 @@
     /* Optional: specify a min-width to ensure a minimum size for the text */
     min-width: 0; /* If you're having issues with overflow, start with 0 */
     /* Adjust padding or margin as needed */
+    margin-left: auto;
 }
 
 .text-data-container h3 {

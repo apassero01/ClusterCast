@@ -69,7 +69,7 @@ function populateTextDataContainer(results,pairContainer) {
     textContainer.classList.add('text-data-container');
 
     // Display summary in a single line
-    let summary = `Train set length: ${results.train_set_length} | Test set length: ${results.test_set_length} | Cluster Number: ${results.cluster_label}`;
+    let summary = `Train length: ${results.train_set_length} | Test length: ${results.test_set_length} | Cluster Number: ${results.cluster_label}`;
     let summaryP = document.createElement('p');
     summaryP.textContent = summary;
     summaryP.classList.add('summary-line');
@@ -78,7 +78,7 @@ function populateTextDataContainer(results,pairContainer) {
     // Function to create and append step data
     results.step_accuracy.forEach((acc, index) => {
         let stepData = document.createElement('p');
-        stepData.innerHTML = `Step: ${index + 1} <span class="percentage">${Math.round(acc)}%</span> Weighted: <span class="percentage">${Math.round(results.step_accuracy_weighted[index])}%</span> | PredRet: <span class="num">${results.step_predicted_return[index]}</span> | ActRet: <span class="num">${results.step_actual_return[index]}</span>`;
+        stepData.innerHTML = `Step: ${index + 1} <span class="percentage">${Math.round(acc)}%</span> Weighted: <span class="percentage">${Math.round(results.step_accuracy_weighted[index])}%</span> | PredRet: <span class="num">${results.step_predicted_return[index].toFixed(2)}</span> | ActRet: <span class="num">${results.step_actual_return[index].toFixed(2)}</span>`;
         stepData.classList.add('step-line');
         textContainer.appendChild(stepData);
     });

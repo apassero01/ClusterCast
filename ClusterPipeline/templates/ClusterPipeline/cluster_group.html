@@ -3,27 +3,19 @@
 
 {% block extrahead %}
     <link rel="stylesheet" href="{% static 'css/visualization_styles.css' %}">
-    <!-- Include any additional CSS or JS specific to cluster_group.html -->
+        <!-- Include any additional CSS or JS specific to cluster_group.html -->
     <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
     <style>
-        .parent-container {
-            display: flex;
-            flex-direction: row; /* Align children horizontally */
-            height: calc(100% - 50px); /* Adjust based on header height */
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
 
         /* Left side content styles (if exists) */
         .left-content {
-            width: 25%;
+            width: 40%;
             /* additional styles */
         }
         .data-visualization {
             display: flex;
             flex-direction: column; /* Stack children vertically */
-            width: 75%; /* Full width of the parent */
+            width: 70%; /* Full width of the parent */
             padding: 20px;
             box-sizing: border-box;
             overflow-y: auto; /* Vertical scroll for overflow */
@@ -31,33 +23,45 @@
     </style>
 {% endblock extrahead %}
 
+
 {% block content %}
     <!-- Include the cluster visualization template -->
 
-    <div class="parent-container">
+
         <!-- Left side content (if exists) -->
-        <div class="left-content">
-            <!-- Other content goes here -->
-            <button id="loadDataButton">Load Data</button>
-        </div>
-    
-        <!-- Data visualization container -->
-        <div class="data-visualization">
-            <!-- Include the cluster visualization template -->
-            {% include 'ClusterPipeline/cluster_visualization.html' %}
-        </div>
+
+
+    <div class="left-content">
+        <!-- Other content goes here -->
+        <select id="dataSelection">
+            {% for item in menu_items %}
+                <option value="{{ item }}">{{ item }}</option>
+            {% endfor %}
+        </select>
+        <button id="loadDataButton">Load Data</button>
     </div>
+
+    <!-- Data visualization container -->
+    <div class="data-visualization">
+        <!-- Include the cluster visualization template -->
+        {% include 'ClusterPipeline/cluster_visualization.html' %}
+    </div>
+
 
     <script>
         document.getElementById('loadDataButton').addEventListener('click', function() {
             // Make a POST request to the server
+            showLoader();
+            let formData = {};
+            formData['cluster_group'] = document.getElementById('dataSelection').value;
+            console.log(formData);
             fetch('', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     // Additional headers here
                 },
-                body: JSON.stringify({ /* Your request body data */ })
+                body: JSON.stringify( formData )
             })
             .then(response => response.json())
             .then(data => {
@@ -66,7 +70,8 @@
                 // Call the renderVisualization function with the response data
                 renderVisualization(data);
             })
-            .catch(error => console.error('Error:', error));
+            .catch(error => console.error('Error:', error))
+            .finally(() => hideLoader());
         });
     </script>
 {% endblock content %}

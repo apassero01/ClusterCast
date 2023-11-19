@@ -50,13 +50,6 @@ body, html {
     color: #000000f1;
 }
 
-/* Style the header for a sleeker look */
-.header {
-    background-color: #020202; /* A fresh blue shade */
-    color: #fff;
-    text-align: center;
-    padding: 20px 0;
-}
 
 .header h1 {
     margin: 0;
@@ -71,19 +64,6 @@ body, html {
 }
 
 
-/* Style adjustments for a cleaner layout */
-.option-container {
-    margin-bottom: 20px;
-}
-
-/* Style the input and select elements for a consistent look */
-input[type="text"], input[type="date"], input[type="number"], select {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    margin-top: 5px;
-}
 
 /* Hover and focus effects for buttons and inputs */
 .button:hover, .button:focus {
@@ -107,6 +87,110 @@ select option:hover, select option:active {
 /* Smooth transitions for interactive elements */
 input, select, .button {
     transition: all 0.3s ease;
+}
+
+.parent-container {
+    display: flex;
+    flex-direction: row; /* Align children horizontally */
+    height: calc(100% - 50px); /* Adjust based on header height */
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    color: #3498db ;
+}
+
+
+
+.loader {
+    border: 16px solid #f3f3f3; /* Light grey */
+    border-top: 16px solid #3498db; /* Blue */
+    border-radius: 50%;
+    width: 120px;
+    height: 120px;
+    animation: spin 2s linear infinite;
+    position: fixed; /* or absolute */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000; /* Ensure it's above other items */
+    display: none; /* Hidden by default */
+}
+
+/* Add the keyframes for the spinning effect */
+@keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Reset some default styles for a clean look */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+body {
+    background-color: #f4f4f4; /* Light grey background for contrast */
+}
+
+.header {
+    background-color: #333; /* Dark background for the header */
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px; /* Adjusted padding */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+}
+
+.header h1 {
+    font-size: 2.4rem; /* Increased size for visibility */
+    font-weight: normal;
+}
+
+.header-buttons {
+    display: flex;
+}
+
+.header-button {
+    background-color: #000000; /* Neutral background for buttons */
+    color: #fff;
+    text-decoration: none;
+    padding: 10px 20px;
+    margin: 0 10px;
+    border: 2px solid #5a5a5a; /* Border for the boxed look */
+    border-radius: 6px; /* Rounded corners for the box */
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Shadow for a "lifted" button effect */
+}
+
+.header-button:hover, .header-button:focus {
+    background-color: #4CAF50; /* Color change for interaction */
+    border-color: #4CAF50; /* Border color changes to match background on hover */
+    color: #fff;
+    transform: translateY(-3px); /* Button moves up slightly on hover */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* Shadow increases on hover for depth */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+    }
+    
+    .header h1 {
+        margin-bottom: 15px;
+    }
+
+    .header-buttons {
+        flex-direction: column;
+    }
+
+    .header-button {
+        width: 100%; /* Full-width buttons on smaller screens */
+        margin: 5px 0;
+    }
 }
 
 

@@ -12,9 +12,33 @@
 <body>
     <div class="header">
         <h1>ClusterCast</h1>
+
+        <div class="header-buttons">
+            <a href="/cluster-run" class="header-button">Create Group</a>
+            <a href="/cluster-group" class="header-button">View Group</a>
+        </div>
     </div>
-    {% block content %}
-    <!-- Replaceable content goes here -->
-    {% endblock content %}
+
+    <div class ="parent-container">
+        <div id="loader" class="loader"></div>
+        {% block content %}{% endblock content %}
+    </div>
+
+
+
+    {% block javascript %}
+        <script>
+            // JavaScript to show and hide the loader
+            function showLoader() {
+                document.getElementById('loader').style.display = 'block';
+                console.log('showing loader');  
+            }
+
+            function hideLoader() {
+                document.getElementById('loader').style.display = 'none';
+            }
+        </script>
+    {% endblock javascript %}
+
 </body>
 </html>

@@ -298,13 +298,13 @@ def get_stock_data(
     df = pd.DataFrame()
     if end_date:
         df = yf.download([ticker], start=start_date, end=end_date, interval=interval)
-        vix = yf.download(["^VIX"], start=start_date, end=end_date, interval=interval)
+        # vix = yf.download(["^VIX"], start=start_date, end=end_date, interval=interval)
     else:
         df = yf.download([ticker], start=start_date, interval=interval)
-        vix = yf.download(["^VIX"], start=start_date, interval=interval)
+        # vix = yf.download(["^VIX"], start=start_date, interval=interval)
 
     df = df.drop(columns="Adj Close")
-    df['Vix'] = vix['High']
+    # df['Vix'] = vix['High']
     # Standard column names needed for pandas-ta
     df = df.rename(
         columns={
