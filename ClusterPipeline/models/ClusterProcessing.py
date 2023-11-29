@@ -22,6 +22,7 @@ import sys
 class SupportedParams(models.Model):
     """
     Class to contain potential parameters for running the pipeline
+    We can run methods in this class to add parameters to the database that can be used for front end forms 
     """
     features = models.JSONField(default=list)
     name = models.CharField(max_length=100,default="")
@@ -33,6 +34,9 @@ class SupportedParams(models.Model):
     cuma_features = models.JSONField(default=list)
 
     def generate_features(self):
+        '''
+        Method to generate a list of all the features that the current pipeline produces
+        '''
         tickers = ['spy']
         start = '2020-01-01'
         target_cols = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
@@ -55,6 +59,9 @@ class SupportedParams(models.Model):
         self.features = list(cluster_group.sequence_set.group_params.X_cols)
     
     def generate_features_by_type(self):
+        '''
+        Similiar types of features are grouped together. This method generates a list of features for each type
+        '''
         tickers = ['spy']
         start = '2020-01-01'
         target_cols = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
@@ -84,6 +91,9 @@ class SupportedParams(models.Model):
             self.rolling_features += feature.cols
 
 class ClusterGroupParams(models.Model): 
+    '''
+    Class to contain parameters for running the pipeline. This class is abstract
+    '''
     start_date = models.DateField()
     end_date = models.DateField()
     n_steps = models.IntegerField()
@@ -120,13 +130,6 @@ class StockClusterGroupParams(ClusterGroupParams):
     cluster_features = models.JSONField(default=list)
     training_features = models.JSONField(default=list)
 
-        # self.scaling_dict = {
-        #     'price_vars': ScalingMethod.SBSG,
-        #     'trend_vars' : ScalingMethod.SBS,
-        #     'pctChg_vars' : ScalingMethod.QUANT_MINMAX,
-        #     'rolling_vars' : ScalingMethod.QUANT_MINMAX_G,
-        #     'target_vars' : ScalingMethod.UNSCALED
-        # }
     
 
 
@@ -174,6 +177,10 @@ class StockClusterPeriod(ClusterPeriod):
 
 
 class ClusterGroup(models.Model): 
+    '''
+    Class to encapsulate a group of clusters ie. The class that can run a clustering algorithm on all the data points, and 
+    then create cluster objects for each label returned from the clustering algorithm. This class is abstract. 
+    '''
     n_clusters = models.IntegerField(default=0)
     train_labels = models.JSONField(default=list)
     test_labels = models.JSONField(default=list)
@@ -192,28 +199,39 @@ class ClusterGroup(models.Model):
         pass
 
 class StockClusterGroup(ClusterGroup):
+    '''
+    Implementation of the ClusterGroup class for stock data
+    '''
     group_params = models.OneToOneField(StockClusterGroupParams, on_delete=models.CASCADE, related_name='group_params')
 
     def create_data_set(self):
+        '''
+        Method to create a StockDataSet object from the group_params
+        '''
         self.data_set = StockDataSet(self.group_params)
         self.data_set.preprocess_pipeline() 
         self.group_params = self.data_set.group_params
 
     
     def create_sequence_set(self):
+        '''
+        Method to create a StockSequenceSet object from the data_set
+        '''
         self.sequence_set = self.data_set.create_sequence_set() 
         self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
         self.group_params = self.sequence_set.group_params
     
-    def run_clustering(self,alg = 'TSKM',metric = "dtw"):
-        
+    def run_clustering(self,alg = 'TSKM',metric = "euclidean"):
+        '''
+        Method to run a clustering algorithm on the data set. 
+
+        Parameters:
+        alg: The clustering algorithm to use. Currently only supports TimeSeriesKMeans
+        metric: The metric to use for the clustering algorithm. default is euclidean
+        '''
         self.get_3d_array()
         X_train_cluster = self.filter_by_features(self.X_train, self.group_params.cluster_features)
         X_test_cluster = self.filter_by_features(self.X_test, self.group_params.cluster_features)
-
-        print(X_train_cluster.shape)
-        print(X_test_cluster.shape)
-
 
 
         if alg == 'TSKM':
@@ -227,6 +245,9 @@ class StockClusterGroup(ClusterGroup):
 
         self.train_labels = [int(x) for x in self.train_labels]
         self.test_labels = [int(x) for x in self.test_labels]
+
+        self.cluster_distances = self.cluster_alg.transform(X_train_cluster)
+        self.cluster_centers = self.cluster_alg.cluster_centers_
 
         train_seq_elements = self.group_params.train_seq_elements
         test_seq_elements = self.group_params.test_seq_elements
@@ -265,32 +286,52 @@ class StockClusterGroup(ClusterGroup):
 
     
     def create_clusters(self):
+        '''
+        Method to create a StockCluster object for each label returned from the clustering algorithm
+        '''
 
         train_seq_elements = self.group_params.train_seq_elements
         test_seq_elements = self.group_params.test_seq_elements
 
-        train_labels = np.unique([self.train_labels])
+        train_labels_unique = np.unique([self.train_labels])
 
         self.clusters = []
 
-        for label in train_labels:
+        for label in train_labels_unique:
+            # Get all the sequences that belong to this cluster
             cur_train_seq_elements = [x for x in train_seq_elements if x.cluster_label == label]
             cur_test_seq_elements = [x for x in test_seq_elements if x.cluster_label == label]
+
+            # Get the distances of all the sequences in this cluster to the cluster center
+            cluster_distances = self.cluster_distances[self.train_labels == label, label]
+
+            std_dev = np.std(cluster_distances)
+
+            iqr = np.percentile(cluster_distances, 75) - np.percentile(cluster_distances, 25)
+
+            metrics = {"std_dev": std_dev, "iqr": iqr}
 
             if len(cur_train_seq_elements) == 0 or len(cur_test_seq_elements) == 0:
                 continue
 
-            cluster = StockCluster.objects.create(label=label, cluster_group=self)
+            # Create the object and pass in the label, cluster_group and associated metrics 
+            cluster = StockCluster.objects.create(label=label, cluster_group=self, cluster_metrics=metrics)
             cluster.initialize(cur_train_seq_elements,cur_test_seq_elements)
             self.clusters.append(cluster)
 
 
-    # def display_all_clusters(self):
-    #     for cluster in self.clusters:
-    #         fig = cluster.visualize_cluster()
-    #         fig.show()
+
     
     def train_all_rnns(self,model_features, fine_tune = True):
+        '''
+        Method to train an RNN for each cluster. The functionality for training an RNN is encapsulated in the train_rnn method of the StockCluster class.
+        This method iterates over the clusters and trains the model. 
+
+        Parameters:
+        model_features: The features to use for training the RNN.
+        fine_tune: Boolean to indicate whether we are training a base model and fine tunining it on the individual clusters. 
+        '''
+        model_features = ['pctChgclose_cumulative','pctChgvolume_cumulative']
         model = None 
         if fine_tune:
             self.train_general_model(model_features)
@@ -314,6 +355,9 @@ class StockClusterGroup(ClusterGroup):
 
     
     def train_general_model(self,model_features):
+        '''
+        Method for training a general model on the entire data set. This model will be used for fine tuning on the individual clusters.
+        '''
         X_train = self.filter_by_features(self.X_train, model_features)
         X_test = self.filter_by_features(self.X_test, model_features)
         y_train = self.y_train
@@ -321,43 +365,51 @@ class StockClusterGroup(ClusterGroup):
 
         self.general_model = create_model(len(model_features))
         
-        self.general_model.fit(X_train, y_train, epochs=100, batch_size=16, validation_data=(X_test, y_test), verbose=1)
+        self.general_model.fit(X_train, y_train, epochs=10, batch_size=16, validation_data=(X_test, y_test), verbose=1)
         clear_session()
 
 
     def filter_by_features(self,seq, feature_list):
+        '''
+        Method to filter a 3d array of sequences by a list of features.
+        '''
         seq = seq.copy()
         indices = [self.group_params.X_feature_dict[x] for x in feature_list]
         # Using numpy's advanced indexing to select the required features
         return seq[:, :, indices]
     
     def get_3d_array(self): 
+        '''
+        Method to get the 3d array of sequences from the sequence set
+        '''
         self.X_train, self.y_train, self.X_test, self.y_test = self.sequence_set.get_3d_array()
         return self.X_train, self.y_train, self.X_test, self.y_test
     
     def load_saved_clusters(self):
+        '''
+        Method to load saved clusters from the database
+        '''
         self.clusters = StockCluster.objects.filter(cluster_group = self)
 
     def generate_new_group(self):
-        try: 
-            model_features = self.group_params.training_features;
-            self.create_data_set()
-            self.create_sequence_set()
-            self.run_clustering()
-            self.create_clusters()
-            self.train_all_rnns(model_features=model_features)
-        except Exception as e:
-            print("Error in generating new group")
-            print(e)
-            if len(self.clusters) != 0: 
-                for cluster in self.clusters:
-                    cluster.delete()
-            sys.exit(1)
+        '''
+        Method to generate a new group. This method is used when the user wants to run the pipeline from scratch
+        '''
+        model_features = self.group_params.training_features;
+        self.create_data_set()
+        self.create_sequence_set()
+        self.run_clustering()
+        self.create_clusters()
+        self.train_all_rnns(model_features=model_features)
+
         self.save()
     
     def load_saved_group(self):
+        '''
+        Method to load a saved group from the database. We perform the preprocessing steps that are necessary and avoid the ones that are not
+        '''
         self.create_data_set()
-        self.create_sequence_set() 
+        self.create_sequence_set()
         self.load_saved_clusters()
 
         train_seq_elements = self.group_params.train_seq_elements
@@ -385,18 +437,33 @@ class StockClusterGroup(ClusterGroup):
 
 
 class Cluster(models.Model):
+    '''
+    Abstract class to encapsulate a cluster. This class is abstract. A cluster is a group of sequences that were assigned the same label in 
+    a clustering algorithm. 
+
+    label: is the label assigned to this cluster
+    model_file_string: is the path to the directory where the model is saved
+    cluster_metrics: is a dictionary containing metrics for this cluster
+    '''
     label = models.IntegerField(default=-1)
     elements_file_string = models.CharField(max_length=100,default="")
     model_file_string = models.CharField(max_length=100,default="")
+    cluster_metrics = models.JSONField(default=dict)
     class Meta:
         abstract = True
     
     def initialize(self,train_seq_elements,test_seq_elements):
+        '''
+        Method to initialize the cluster. This method is called after the cluster is created and the sequences are assigned to it.
+        '''
         self.train_seq_elements = train_seq_elements
         self.test_seq_elements = test_seq_elements
         self.get_3d_array()
 
     def get_3d_array(self):
+        '''
+        Method to get the 3d array of sequences from the sequence set
+        '''
         if len(self.train_seq_elements) == 0 or len(self.test_seq_elements) == 0:
             raise ValueError("No sequences in this cluster")
         
@@ -407,6 +474,9 @@ class Cluster(models.Model):
     
 
     def serialize(self):
+        '''
+        Method to serialize the cluster. This method saves the model and the sequences to the database
+        '''
         group_name = self.cluster_group.group_params.name
     
         self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}/"
@@ -420,25 +490,18 @@ class Cluster(models.Model):
         with open(self.model_file_string+"Model.pkl", 'wb') as f:
             pickle.dump(self.model, f)
     
-    def deserialize_elements(self):
-        seq_elements = self.sequence_elements.all()
-
-        for element in seq_elements:
-            x_path = element.seq_x_scaled_path
-            y_path = element.seq_y_scaled_path
-            element.seq_x_scaled = np.load(x_path)
-            element.seq_y_scaled = np.load(y_path)
-
-        self.train_seq_elements = [x for x in seq_elements if x.isTrain]
-        self.test_seq_elements = [x for x in seq_elements if not x.isTrain]
-
-        self.get_3d_array()
     
     def deserialize_model(self):
+        '''
+        Method to load the model from the database
+        '''
         with open(self.model_file_string, 'rb') as f:
             self.model = pickle.load(f)
 
 class StockCluster(Cluster):
+    '''
+    Implementation of the Cluster class for stock data
+    '''
     cluster_group = models.ForeignKey(StockClusterGroup, on_delete=models.CASCADE, related_name='clusters_obj')
     
     def remove_outliers(self):
@@ -481,53 +544,78 @@ class StockCluster(Cluster):
 
         return fig
     
-    def visualize_target_values(self):
+    def visualize_future_distribution(self, isTest = True):
         '''
-        Create a scatter plot of the target values for the cluster using Plotly
+        Create stacked box and whisker plots for the predicted and real values
         '''
-        if self.train_seq_elements is None or self.test_seq_elements is None:
-            self.load_saved_sequences()
-        target_vals = self.y_train
 
-        num_elements = len(target_vals)
-        num_steps = len(target_vals[0])
+        fig = go.Figure()
+        step_results =  StepResult.objects.filter( cluster = self) 
 
-        # Create traces for each step
-        traces = []
-        for step in range(num_steps):
-            # Create a scatter trace for this step
-            scatter = go.Scatter(
-                x=[step+1] * num_elements,
-                y=target_vals[:, step],
-                mode='markers',
-                name=f'Step {step+1}'
-            )
-            traces.append(scatter)
+        for step_result in step_results:
+            i = step_result.steps_in_future 
 
-        # Calculate averages and create a trace for the averages
-        averages = np.mean(target_vals, axis=0)
-        averages_trace = go.Scatter(
-            x=list(range(1, num_steps + 1)),
-            y=averages,
-            mode='lines+markers',
-            name='Average',
-            line=dict(color='red', dash='dash', width=2),
-            marker=dict(size=12)
-        )
-        traces.append(averages_trace)
+            if isTest:
+                fig.add_trace(go.Box(y=step_result.predicted_values, name=f'Predicted {i}')) 
+                fig.add_trace(go.Box(y=step_result.actual_values, name=f'Real {i}'))
+            else:
+                fig.add_trace(go.Box(y=self.y_train[:,i], name=f'Predicted {i}'))
 
-        # Create a layout
-        layout = go.Layout(
-            title='Target Values Scatter Plot',
-            xaxis=dict(title='Step'),
-            yaxis=dict(title='Value', range=[-10, 10]),
-            showlegend=True
-        )
+        fig.update_layout(
+            title='Future Performance of Cluster',
+            xaxis_title='Steps in future',
+            yaxis_title='Cumulative Percent Change'
+        ) 
 
-        # Create a figure
-        fig = go.Figure(data=traces, layout=layout)
+        return fig 
+    
+    # def visualize_target_values(self):
+    #     '''
+    #     Create a scatter plot of the target values for the cluster using Plotly
+    #     '''
+    #     if self.train_seq_elements is None or self.test_seq_elements is None:
+    #         self.load_saved_sequences()
+    #     target_vals = self.y_train
 
-        return fig
+    #     num_elements = len(target_vals)
+    #     num_steps = len(target_vals[0])
+
+    #     # Create traces for each step
+    #     traces = []
+    #     for step in range(num_steps):
+    #         # Create a scatter trace for this step
+    #         scatter = go.Scatter(
+    #             x=[step+1] * num_elements,
+    #             y=target_vals[:, step],
+    #             mode='markers',
+    #             name=f'Step {step+1}'
+    #         )
+    #         traces.append(scatter)
+
+    #     # Calculate averages and create a trace for the averages
+    #     averages = np.mean(target_vals, axis=0)
+    #     averages_trace = go.Scatter(
+    #         x=list(range(1, num_steps + 1)),
+    #         y=averages,
+    #         mode='lines+markers',
+    #         name='Average',
+    #         line=dict(color='red', dash='dash', width=2),
+    #         marker=dict(size=12)
+    #     )
+    #     traces.append(averages_trace)
+
+    #     # Create a layout
+    #     layout = go.Layout(
+    #         title='Target Values Scatter Plot',
+    #         xaxis=dict(title='Step'),
+    #         yaxis=dict(title='Value', range=[-10, 10]),
+    #         showlegend=True
+    #     )
+
+    #     # Create a figure
+    #     fig = go.Figure(data=traces, layout=layout)
+
+    #     return fig
 
 
     
@@ -545,7 +633,7 @@ class StockCluster(Cluster):
             freeze_up_to_layer_name = 'repeat_vector'
             self.model = clone_for_tuning(general_model, freeze_up_to_layer_name, learning_rate=0.0001)
         
-        self.model.fit(X_train_filtered, y_train, epochs=75, batch_size=16, validation_data=(X_test_filtered, y_test), verbose=1)
+        self.model.fit(X_train_filtered, y_train, epochs=150, batch_size=16, validation_data=(X_test_filtered, y_test), verbose=1)
 
         predicted_y = self.model.predict(X_test_filtered)
         predicted_y = np.squeeze(predicted_y, axis=-1)
@@ -557,9 +645,8 @@ class StockCluster(Cluster):
         for i in range(num_days):
             results[f'real_{i+1}'] = y_test[:, i]
 
+        # Calculate the P/L for each predictio
         # Generate output string with accuracies
-
-        output_string = f"Cluster Number: {self.label}\n"
         self.step_results = [] 
         for i in range(num_days):
             step_result = StepResult.objects.create(steps_in_future = i+1, cluster = self,train_set_length = len(X_train_filtered), test_set_length = len(y_test))
@@ -567,26 +654,36 @@ class StockCluster(Cluster):
                     ((results[f'predicted_{i+1}'] < 0) & (results[f'real_{i+1}'] < 0))
             accuracy = round(same_day.mean() * 100,2)
             w_accuracy = round(weighted_dir_acc(results[f'predicted_{i+1}'], results[f'real_{i+1}']),2)
+            p_l = profit_loss(results[f'predicted_{i+1}'], results[f'real_{i+1}'])
+
+
+            step_result.predicted_values = list(results[f'predicted_{i+1}'])
+            step_result.actual_values = list(results[f'real_{i+1}'])
+
+
+
+            with open("test_output.txt", "a") as f:
+                # Writing headers
+                f.write("Predicted, Real\n")
+                
+                # Writing each row's predicted and real values
+                for _, row in results.iterrows():
+                    f.write(f"{row[f'predicted_{i+1}']}, {row[f'real_{i+1}']}\n")
+                
+                # Writing additional information
+                f.write("\n")  # New line for separation
+                f.write(f"Accuracy: {accuracy}\n")
+                f.write(f"Weighted Accuracy: {w_accuracy}\n")
+                f.write(f"Profit/Loss: {p_l}\n")
 
             step_result.dir_accuracy = accuracy
+            step_result.p_l = p_l
             step_result.weighted_dir_acc = w_accuracy
             step_result.predicted_return = round(results[f'predicted_{i+1}'].mean(),2)
             step_result.actual_return = round(results[f'real_{i+1}'].mean(),2)
             step_result.save()
 
-            output_string += (
-                f"Accuracy{i+1}D {accuracy}% (Weighted: {w_accuracy}%) "
-                f"PredictedRet: {results[f'predicted_{i+1}'].mean()} "
-                f"ActRet: {results[f'real_{i+1}'].mean()}\n"
-            )
-        
-        output_string += f"Train set length: {len(X_train_filtered)} Test set length: {len(y_test)}\n"
-
-        with open('output.txt', 'a') as f:
-            f.write(output_string)
-
         clear_session()
-
     
     def filter_results(self,threshhold = 0.2,test_set_length = 30):
         self.step_results = StepResult.objects.filter(cluster = self)
@@ -604,6 +701,7 @@ class StockCluster(Cluster):
             "step_accuracy_weighted": [],
             "step_predicted_return": [],
             "step_actual_return": [],
+            "step_p_l": [],
         }
         self.step_results = self.cluster_results.all()
         for result in self.step_results:
@@ -611,6 +709,7 @@ class StockCluster(Cluster):
             results["step_accuracy_weighted"].append(int(result.weighted_dir_acc))
             results["step_predicted_return"].append(float(result.predicted_return))
             results["step_actual_return"].append(float(result.actual_return))
+            results["step_p_l"].append(float(result.p_l))
         return results
     
 
@@ -624,6 +723,21 @@ def weighted_dir_acc(predicted, actual):
     magnitude_difference = np.abs(np.abs(predicted) - np.abs(actual)) + 1e-6
     weights = np.abs(actual) / magnitude_difference
     return np.sum(directional_accuracy * weights) / np.sum(weights) * 100
+
+def profit_loss(predicted, actual):
+    p_l = 0
+    for i in range(len(predicted)):
+        if predicted[i] > 0:
+            if actual[i] > 0:
+                p_l += abs(actual[i])
+            else:
+                p_l -= abs(actual[i])
+        else:
+            if actual[i] < 0:
+                p_l += abs(actual[i])
+            else:
+                p_l -= abs(actual[i])
+    return p_l/len(predicted)
 
 def create_model(input_shape):
     model_lstm = Sequential()
@@ -690,6 +804,9 @@ class StepResult(models.Model):
     actual_return = models.FloatField(default=0)
     train_set_length = models.IntegerField(default=0)
     test_set_length = models.IntegerField(default=0)
+    p_l = models.FloatField(default=0)
+    predicted_values = models.JSONField(default=list)
+    actual_values = models.JSONField(default=list)
 
     def get_results(self):
         step_results = {
