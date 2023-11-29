@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.pkl
 *.pyc
+*.sqlite3
 # C extensions
 *.so
 /SavedModels/*
