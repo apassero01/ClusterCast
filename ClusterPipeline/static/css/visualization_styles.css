@@ -11,10 +11,9 @@
 
 .graph-container {
     flex: 1; /* Grow to available space */
-    max-width: 33%; /* Maximum width of the graph container */
+    max-width: 50%; /* Maximum width of the graph container */
     height: auto; /* Maintain aspect ratio of the graph */
     position: relative; /* Set the position context for the plot */
-    min-width: 0; /* If you're having issues with overflow, start with 0 */
 }
 
 .text-data-container {
@@ -22,7 +21,7 @@
     /* Optional: specify a min-width to ensure a minimum size for the text */
     min-width: 0; /* If you're having issues with overflow, start with 0 */
     /* Adjust padding or margin as needed */
-    margin-left: 20px;
+    margin-left: auto;
 }
 
 .text-data-container h3 {

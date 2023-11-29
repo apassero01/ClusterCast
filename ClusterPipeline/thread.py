@@ -1,7 +1,5 @@
 import threading
 from .models.ClusterProcessing import StockClusterGroup, StockClusterPeriod 
-import traceback
-import sys
 
 
 class CreateGroupBackground(threading.Thread):
@@ -13,13 +11,11 @@ class CreateGroupBackground(threading.Thread):
         try: 
             print("Background thread started")
             self.create_new_group()
-            print("Background thread finished")
 
         except Exception as e:
             print("Background thread failed")
-            traceback.print_exc()
+            print(e)
             self.group_params.delete()
-            sys.exit(1)
 
     def create_new_group(self):
         cluster_group = StockClusterGroup.objects.create(group_params = self.group_params)

@@ -28,8 +28,6 @@ function renderVisualization(data) {
         data.results.forEach(pair => {
             const [fig, metrics] = pair;
 
-            // unpack tuple of figs to fig1 fig3
-            const [fig1, fig2] = fig;
             // Create the container for the graph-text pair
             let pairContainer = document.createElement('div');
             pairContainer.classList.add('graph-text-pair-container');
@@ -44,7 +42,7 @@ function renderVisualization(data) {
             pairContainer.appendChild(graphContainer);
 
             // Render the figure using Plotly
-            Plotly.newPlot(graphContainer, fig1.data, fig1.layout, {responsive: true});
+            Plotly.newPlot(graphContainer, fig.data, fig.layout, {responsive: true});
 
             // Create the container for the text
             // let textContainer = document.createElement('div');
@@ -55,14 +53,6 @@ function renderVisualization(data) {
             // let p = document.createElement('p');
             // p.textContent = metrics;
             // textContainer.appendChild(p);
-            graphContainer = document.createElement('div');
-            graphContainer.classList.add('graph-container');
-            
-
-            // Append the graph container to the pair container
-            pairContainer.appendChild(graphContainer);
-
-            Plotly.newPlot(graphContainer, fig2.data, fig2.layout, {responsive: true});
             // text();
             populateTextDataContainer(metrics,pairContainer);
 
@@ -74,8 +64,6 @@ function renderVisualization(data) {
 function text(){
     console.log("hello")
 }
-
-
 function populateTextDataContainer(results,pairContainer) {
     let textContainer = document.createElement('div');
     textContainer.classList.add('text-data-container');
@@ -90,7 +78,7 @@ function populateTextDataContainer(results,pairContainer) {
     // Function to create and append step data
     results.step_accuracy.forEach((acc, index) => {
         let stepData = document.createElement('p');
-        stepData.innerHTML = `Step: ${index + 1} <span class="percentage">${Math.round(acc)}%</span> Weighted: <span class="percentage">${Math.round(results.step_accuracy_weighted[index])}%</span> | PredRet: <span class="num">${results.step_predicted_return[index].toFixed(2)}</span> | ActRet: <span class="num">${results.step_actual_return[index].toFixed(2)}</span> | p/l: <span class="num">${results.step_p_l[index].toFixed(2)}</span>`;
+        stepData.innerHTML = `Step: ${index + 1} <span class="percentage">${Math.round(acc)}%</span> Weighted: <span class="percentage">${Math.round(results.step_accuracy_weighted[index])}%</span> | PredRet: <span class="num">${results.step_predicted_return[index].toFixed(2)}</span> | ActRet: <span class="num">${results.step_actual_return[index].toFixed(2)}</span>`;
         stepData.classList.add('step-line');
         textContainer.appendChild(stepData);
     });

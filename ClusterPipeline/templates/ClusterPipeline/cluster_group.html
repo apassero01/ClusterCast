@@ -8,28 +8,17 @@
     <style>
 
         /* Left side content styles (if exists) */
-        .top-content {
-            width: 100%; /* Full width */
-            /* Additional styles for top content */
-            padding: 20px;
-            box-sizing: border-box;
+        .left-content {
+            width: 40%;
+            /* additional styles */
         }
         .data-visualization {
             display: flex;
             flex-direction: column; /* Stack children vertically */
-            width: 100%; /* Full width of the parent */
+            width: 70%; /* Full width of the parent */
             padding: 20px;
             box-sizing: border-box;
             overflow-y: auto; /* Vertical scroll for overflow */
-        }
-        .parent-container {
-            display: flex;
-            flex-direction: column; /* Align children horizontally */
-            height: calc(100% - 50px); /* Adjust based on header height */
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            color: #3498db ;
         }
     </style>
 {% endblock extrahead %}
@@ -42,7 +31,7 @@
         <!-- Left side content (if exists) -->
 
 
-    <div class="top-content">
+    <div class="left-content">
         <!-- Other content goes here -->
         <select id="dataSelection">
             {% for item in menu_items %}

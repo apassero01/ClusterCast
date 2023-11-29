@@ -228,7 +228,6 @@ class SequenceScaler:
     def __init__(self,group_params) -> None:
 
         self.group_params = group_params
-    
         
   
     def scale_sequences(self):

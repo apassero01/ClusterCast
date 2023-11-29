@@ -206,11 +206,9 @@ def cluster_group(request):
         cluster_group.load_saved_group()
         for cluster in cluster_group.clusters: 
             fig1 = cluster.visualize_cluster()
-            fig2 = cluster.visualize_future_distribution()
             fig1_json = json.loads(plotly.io.to_json(fig1))
-            fig2_json = json.loads(plotly.io.to_json(fig2))
             metrics = cluster.generate_results()
-            cluster_results.append([(fig1_json,fig2_json),metrics])
+            cluster_results.append([fig1_json,metrics])
             # print(cluster_results[-1])
         
         return JsonResponse({'results': cluster_results})
