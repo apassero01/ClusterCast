@@ -9,6 +9,7 @@ from copy import deepcopy
 from collections import Counter
 from django.db import models
 import json
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 class SequenceElement():         
     def __init__(self,seq_x,seq_y, x_feature_dict, y_feature_dict,isTrain, start_date = None, end_date = None, ticker = None):
@@ -33,11 +34,18 @@ class SequenceElement():
         Takes a list of sequence elements and returns a 3D array of the sequences
         """
         if scaled:
-            X = np.array([sequence_element.seq_x_scaled for sequence_element in sequence_elements])
+            X = np.array([sequence_element.seq_x_scaled for sequence_element in sequence_elements],dtype = object)
             y = np.array([sequence_element.seq_y_scaled for sequence_element in sequence_elements])
         else:
-            X = np.array([sequence_element.seq_x for sequence_element in sequence_elements])
+            X = np.array([sequence_element.seq_x for sequence_element in sequence_elements],dtype = object)
             y = np.array([sequence_element.seq_y for sequence_element in sequence_elements])
+
+        max_length = max(len(seq) for seq in X)
+        X = pad_sequences(X, maxlen=max_length, padding='post', dtype='float32')
+
+
+                          
+
         return X,y
         
 class ScalingMethod(Enum):
@@ -86,17 +94,27 @@ class StockSequenceSet(SequenceSet):
         #empty 3D arrays
         train_seq_elements = []
         test_seq_elements = []
+        future_seq_elements = []
 
-        for i in range(len(self.training_dfs)):
-            training_set = self.training_dfs[i]
-            test_set = self.test_dfs[i]
+        # n_steps = [10, 20,50]
 
-            ticker = tickers[i]
-            train_elements, X_feature_dict, y_feature_dict = create_sequence(training_set, X_cols, y_cols, n_steps, ticker, isTrain = True)
-            test_elements, X_feature_dict, y_feature_dict = create_sequence(test_set, X_cols, y_cols, n_steps, ticker, isTrain = False)
-            
-            train_seq_elements += train_elements
-            test_seq_elements += test_elements
+        n_steps = [n_steps]
+        #ToDO fix this to work with multiple n_steps
+
+        for n in n_steps:
+            for i in range(len(self.training_dfs)):
+                training_set = self.training_dfs[i]
+                test_set = self.test_dfs[i]
+
+                ticker = tickers[i]
+                train_elements, X_feature_dict, y_feature_dict, future_seq_elements = create_sequence(training_set, X_cols, y_cols, n, ticker, isTrain = True)
+                test_elements, X_feature_dict, y_feature_dict, future_seq_elements = create_sequence(test_set, X_cols, y_cols, n, ticker, isTrain = False)
+                print(train_elements[0].seq_x.shape)
+                train_seq_elements += train_elements
+                test_seq_elements += test_elements
+                future_seq_elements += future_seq_elements
+
+
         
         # For QUANT_MIN_MAX features, the scaling occurs before the sequence is created, so we need to add the already scaled feature sets to the new sequence elements
         x_quant_min_max_feature_sets = [feature_set for feature_set in self.group_params.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value] 
@@ -113,6 +131,7 @@ class StockSequenceSet(SequenceSet):
         self.group_params.y_feature_dict = y_feature_dict
         self.group_params.train_seq_elements = train_seq_elements
         self.group_params.test_seq_elements = test_seq_elements
+        self.group_params.future_seq_elements = future_seq_elements
 
         return train_seq_elements, test_seq_elements
     
@@ -410,24 +429,54 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
     y_feature_dict = {col: index for col, index in zip(y_cols_list, y_indices_seq)}
 
     sequence_elements = []
+    future_seq_elements = [] 
 
-    for i in range(len(sequence)):
-        end_idx = i + n_steps
-        if end_idx > len(sequence):
+    for i in range(len(sequence)-1,-1,-1): 
+        start_index = i - n_steps+1
+        if start_index < 0:
             break
 
+        end_idx = i
+
         # Extract sequence for X
-        seq_x = sequence[i:end_idx, :][:, X_indices_df]
+        seq_x = sequence[start_index:end_idx+1, :][:, X_indices_df]
 
         # Get sequence for y from the row at end_idx-1 of sequence for the columns in y_cols
-        seq_y = sequence[end_idx - 1, y_indices_df]
-
+        seq_y = sequence[end_idx, y_indices_df]
+            
         start_date = dates[i]
         end_date = dates[end_idx - 1]
 
         sequence_element = SequenceElement(seq_x, seq_y, X_feature_dict, y_feature_dict, isTrain, start_date, end_date, ticker)
 
-        sequence_elements.append(sequence_element)
+        if seq_y[-1] == np.nan:
+            future_seq_elements.append(sequence_element)
+        else:
+            sequence_elements.append(sequence_element)
+
+    start_date = dates[-n_steps]
+    end_date = dates[-1]
+
+
+
+    # for i in range(len(sequence)):
+    #     end_idx = i + n_steps
+    #     if end_idx > len(sequence):
+    #         break
+
+    #     # Extract sequence for X
+    #     seq_x = sequence[i:end_idx, :][:, X_indices_df]
+
+    #     # Get sequence for y from the row at end_idx-1 of sequence for the columns in y_cols
+    #     seq_y = sequence[end_idx - 1, y_indices_df]
+
+    #     start_date = dates[i]
+    #     end_date = dates[end_idx - 1]
+
+    #     sequence_element = SequenceElement(seq_x, seq_y, X_feature_dict, y_feature_dict, isTrain, start_date, end_date, ticker)
+
+    #     sequence_elements.append(sequence_element)
+
         
-    return sequence_elements, X_feature_dict, y_feature_dict
+    return sequence_elements, X_feature_dict, y_feature_dict, future_seq_elements
 

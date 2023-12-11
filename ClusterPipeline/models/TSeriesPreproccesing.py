@@ -529,11 +529,17 @@ def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = S
         new_col_name = "sumPctChgclose+" + str(num_rows_ahead)
         feature_set.cols.append(new_col_name)
         # Shift the column values by -X to fetch the value X rows ahead
-        df[new_col_name] = df[col].shift(-num_rows_ahead)
+    
+        shifted_col = df[col].shift(-num_rows_ahead)
+
+        shifted_col.fillna(np.nan, inplace=True)
+
+        df[new_col_name] = shifted_col
 
         max_shift = max(max_shift, num_rows_ahead)
     
     df = df.iloc[:-max_shift]
+
 
     return df, feature_set
 

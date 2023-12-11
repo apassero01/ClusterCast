@@ -48,7 +48,7 @@ def home(request):
             'trend_vars' : SP.ScalingMethod.SBS,
             'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX,
             'rolling_vars' : SP.ScalingMethod.QUANT_MINMAX_G,
-            'target_vars' : SP.ScalingMethod.UNSCALED
+            'target_vars' : SP.ScalingMethod.QUANT_MINMAX
         }
 
         # Process the data (this is where you would include your logic)
@@ -143,9 +143,9 @@ def cluster_run(request):
         scaling_dict = {
             'price_vars': SP.ScalingMethod.SBSG,
             'trend_vars' : SP.ScalingMethod.SBS,
-            'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX,
+            'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX_G,
             'rolling_vars' : SP.ScalingMethod.QUANT_MINMAX_G,
-            'target_vars' : SP.ScalingMethod.UNSCALED
+            'target_vars' : SP.ScalingMethod.QUANT_MINMAX_G
         }
 
         col_dict = {

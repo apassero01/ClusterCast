@@ -6,17 +6,21 @@ import numpy as np
 import plotly.graph_objects as go
 import math
 from keras.layers import RepeatVector, TimeDistributed
-from tensorflow.keras.models import Sequential, clone_model
-from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization
+from tensorflow.keras.models import Sequential, clone_model, Model
+from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization, Input, Concatenate, Attention, Masking
 from tensorflow.keras.optimizers import Adam
 import pandas as pd
+import tensorflow as tf
 from kneed import KneeLocator
 import matplotlib.pyplot as plt
 import pickle
 from django.db import models
 from tensorflow.keras.backend import clear_session
 import os
+from tensorflow.keras.callbacks import EarlyStopping
 import sys
+from .RNNModels import RNNModel, ModelTypes
+from tensorflow.keras.initializers import glorot_uniform, zeros
 
 
 class SupportedParams(models.Model):
@@ -236,8 +240,8 @@ class StockClusterGroup(ClusterGroup):
 
         if alg == 'TSKM':
             # n_clusters = self.determine_n_clusters(X_train_cluster,metric)
-            n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 3
-            # n_clusters = 1
+            n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
+            # n_clusters = 35
             self.cluster_alg = TimeSeriesKMeans(n_clusters=n_clusters, metric=metric,random_state=3)
         
         self.train_labels = list(self.cluster_alg.fit_predict(X_train_cluster))
@@ -322,7 +326,7 @@ class StockClusterGroup(ClusterGroup):
 
 
     
-    def train_all_rnns(self,model_features, fine_tune = True):
+    def train_all_rnns(self,model_features, fine_tune = False):
         '''
         Method to train an RNN for each cluster. The functionality for training an RNN is encapsulated in the train_rnn method of the StockCluster class.
         This method iterates over the clusters and trains the model. 
@@ -331,7 +335,8 @@ class StockClusterGroup(ClusterGroup):
         model_features: The features to use for training the RNN.
         fine_tune: Boolean to indicate whether we are training a base model and fine tunining it on the individual clusters. 
         '''
-        model_features = ['pctChgclose_cumulative','pctChgvolume_cumulative']
+        # model_features = ['pctChgclose_cumulative','pctChgvolume_cumulative']
+        # model_features = ['pctChgclose', 'pctChgvolume','sumpctChgclose_6','sumpctChgvolume_6','sumpctChgema50_1','sumpctChgema10_1','sumpctChgema50_6','sumpctChgema10_6']
         model = None 
         if fine_tune:
             self.train_general_model(model_features)
@@ -365,7 +370,7 @@ class StockClusterGroup(ClusterGroup):
 
         self.general_model = create_model(len(model_features))
         
-        self.general_model.fit(X_train, y_train, epochs=10, batch_size=16, validation_data=(X_test, y_test), verbose=1)
+        self.general_model.fit(X_train, y_train, epochs=50, batch_size=16, validation_data=(X_test, y_test), verbose=1)
         clear_session()
 
 
@@ -485,8 +490,10 @@ class Cluster(models.Model):
         # Check if the directory exists
         if not os.path.exists(self.model_file_string):
             # Create the directory if it doesn't exist
+            print("Creating directory " + self.model_file_string)
             os.makedirs(self.model_file_string)
 
+        print("Saving model to " + self.model_file_string)  
         with open(self.model_file_string+"Model.pkl", 'wb') as f:
             pickle.dump(self.model, f)
     
@@ -507,7 +514,7 @@ class StockCluster(Cluster):
     def remove_outliers(self):
         pass
 
-    def visualize_cluster(self, isTrain = True, y_range = [-5,5]):
+    def visualize_cluster(self, isTrain = True, y_range = [-1,1]):
 
         if isTrain:
             arr_3d = self.X_train
@@ -550,7 +557,7 @@ class StockCluster(Cluster):
         '''
 
         fig = go.Figure()
-        step_results =  StepResult.objects.filter( cluster = self) 
+        step_results =  StepResult.objects.filter(cluster = self) 
 
         for step_result in step_results:
             i = step_result.steps_in_future 
@@ -568,74 +575,59 @@ class StockCluster(Cluster):
         ) 
 
         return fig 
-    
-    # def visualize_target_values(self):
-    #     '''
-    #     Create a scatter plot of the target values for the cluster using Plotly
-    #     '''
-    #     if self.train_seq_elements is None or self.test_seq_elements is None:
-    #         self.load_saved_sequences()
-    #     target_vals = self.y_train
-
-    #     num_elements = len(target_vals)
-    #     num_steps = len(target_vals[0])
-
-    #     # Create traces for each step
-    #     traces = []
-    #     for step in range(num_steps):
-    #         # Create a scatter trace for this step
-    #         scatter = go.Scatter(
-    #             x=[step+1] * num_elements,
-    #             y=target_vals[:, step],
-    #             mode='markers',
-    #             name=f'Step {step+1}'
-    #         )
-    #         traces.append(scatter)
-
-    #     # Calculate averages and create a trace for the averages
-    #     averages = np.mean(target_vals, axis=0)
-    #     averages_trace = go.Scatter(
-    #         x=list(range(1, num_steps + 1)),
-    #         y=averages,
-    #         mode='lines+markers',
-    #         name='Average',
-    #         line=dict(color='red', dash='dash', width=2),
-    #         marker=dict(size=12)
-    #     )
-    #     traces.append(averages_trace)
-
-    #     # Create a layout
-    #     layout = go.Layout(
-    #         title='Target Values Scatter Plot',
-    #         xaxis=dict(title='Step'),
-    #         yaxis=dict(title='Value', range=[-10, 10]),
-    #         showlegend=True
-    #     )
-
-    #     # Create a figure
-    #     fig = go.Figure(data=traces, layout=layout)
-
-    #     return fig
-
 
     
     def train_rnn(self,model_features,general_model = None):
         if len(self.X_train) == 0 or len(self.X_test) == 0:
             return
+        
+        model_features = ['pctChgclose', 'pctChgvolume','sumpctChgclose_6','sumpctChgvolume_6','sumpctChgema50_1','sumpctChgema10_1','sumpctChgema50_6','sumpctChgema10_6']
+
         X_train_filtered = self.cluster_group.filter_by_features(self.X_train, model_features)
         X_test_filtered = self.cluster_group.filter_by_features(self.X_test, model_features)
+
+        non_float32_elements = X_train_filtered[np.where(X_train_filtered.dtype != np.float32)]
+
+        if non_float32_elements.size == 0:
+            print("There are no non-float32 elements in the array.")
+        else:
+            print("There are non-float32" + str(non_float32_elements.size) + "elements in the array." + " Out of "+ str(X_train_filtered.size) + " elements.")
+
         y_train = self.y_train
         y_test = self.y_test
 
         if general_model is None: 
             self.model = create_model(len(model_features))
         else: 
-            freeze_up_to_layer_name = 'repeat_vector'
+            freeze_up_to_layer_name = 'encoder_lstm_2' # was repeat vector
             self.model = clone_for_tuning(general_model, freeze_up_to_layer_name, learning_rate=0.0001)
-        
-        self.model.fit(X_train_filtered, y_train, epochs=150, batch_size=16, validation_data=(X_test_filtered, y_test), verbose=1)
+
+
+        # self.model = create_attention(len(model_features),6,1)
+        self.model = RNNModel(ModelTypes.AE, input_shape = X_train_filtered.shape, output_shape = y_train.shape[1],num_encoder_layers=2)
+        self.model.addGRULayer(50,return_sequences=True,activation='tanh')
+        self.model.addDropoutLayer(0.2)
+        self.model.addGRULayer(30,return_sequences=True,activation='tanh')
+        # self.model.addGRULayer(64,return_sequences=True)
+        self.model.addDropoutLayer(0.2)
+        self.model.addGRULayer(20,return_sequences=True,activation='tanh')
+        self.model.addGRULayer(15,return_sequences=True,activation='tanh')
+        # self.model.addLSTMLayer(32,return_sequences=True)
+        # self.model.addLSTMLayer(6,return_sequences=True)
+        self.model.buildModel()
+        # early_stopping = EarlyStopping(
+        #     monitor='val_loss',  # Metric to monitor (e.g., validation loss)
+        #     patience=15,          # Number of epochs with no improvement before stopping
+        #     restore_best_weights=True  # Restore model weights to the best epoch
+        # )
+
+        # Train the model with early stopping
+
+        self.model.fit(X_train_filtered, y_train, epochs=500, batch_size=32, validation_data=(X_test_filtered, y_test))
 
         predicted_y = self.model.predict(X_test_filtered)
+        print(predicted_y.shape)
+        
         predicted_y = np.squeeze(predicted_y, axis=-1)
 
         num_days = predicted_y.shape[1]  # Assuming this is the number of days
@@ -742,20 +734,19 @@ def profit_loss(predicted, actual):
 def create_model(input_shape):
     model_lstm = Sequential()
     
+    # model_lstm.add(Masking(mask_value=0.0, input_shape=(None, input_shape), name='masking_layer'))
     # Encoder
-    model_lstm.add(LSTM(units=250, activation='tanh', return_sequences=True, input_shape=(None, input_shape), name='encoder_lstm_1'))
+    model_lstm.add(LSTM(units=100, activation='tanh', return_sequences=True,input_shape=(None, input_shape), name='encoder_lstm_1'))
     model_lstm.add(BatchNormalization(name='encoder_bn_1'))
     model_lstm.add(Dropout(0.2, name='encoder_dropout_1'))
 
-    model_lstm.add(LSTM(units=250, activation='tanh', return_sequences=True, name='encoder_lstm_2'))
-    model_lstm.add(BatchNormalization(name='encoder_bn_2'))
+    model_lstm.add(LSTM(units=100, activation='tanh', return_sequences=True, name='encoder_lstm_2'))
     model_lstm.add(Dropout(0.2, name='encoder_dropout_2'))
 
-    model_lstm.add(LSTM(units=100, activation='tanh', return_sequences=True, name='encoder_lstm_3'))
-    model_lstm.add(BatchNormalization(name='encoder_bn_3'))
+    model_lstm.add(LSTM(units=50, activation='tanh', return_sequences=True, name='encoder_lstm_3'))
     model_lstm.add(Dropout(0.2, name='encoder_dropout_3'))
 
-    model_lstm.add(LSTM(units=100, activation='tanh', name='encoder_lstm_4'))
+    model_lstm.add(LSTM(units=25, activation='tanh', name='encoder_lstm_4'))
     model_lstm.add(BatchNormalization(name='encoder_bn_4'))
     model_lstm.add(Dropout(0.2, name='encoder_dropout_4'))
     
@@ -767,7 +758,7 @@ def create_model(input_shape):
     model_lstm.add(BatchNormalization(name='decoder_bn_1'))
     model_lstm.add(Dropout(0.2, name='decoder_dropout_1'))
 
-    model_lstm.add(LSTM(units=250, activation='tanh', return_sequences=True, name='decoder_lstm_2'))
+    model_lstm.add(LSTM(units=100, activation='tanh', return_sequences=True, name='decoder_lstm_2'))
     model_lstm.add(BatchNormalization(name='decoder_bn_2'))
     model_lstm.add(Dropout(0.2, name='decoder_dropout_2'))
     
@@ -780,16 +771,30 @@ def create_model(input_shape):
     return model_lstm
 
 
-def clone_for_tuning(base_model, freeze_up_to_layer_name, learning_rate=0.0001):
+def clone_for_tuning(base_model, freeze_up_to_layer_name, learning_rate=0.001):
     new_model = clone_model(base_model)
     new_model.set_weights(base_model.get_weights())
 
     freeze = True 
+    reinitialize = False
 
     for layer in new_model.layers:
         if layer.name == freeze_up_to_layer_name:
-            freeze = False
+            freeze = False  # Stop freezing layers from this point onwards
+            reinitialize = True  # Start reinitializing the subsequent layers
         layer.trainable = not freeze
+
+        # If reinitialization is flagged, reinitialize the layer's weights
+        if reinitialize and hasattr(layer, 'kernel_initializer') and hasattr(layer, 'bias_initializer'):
+            # Get initializers
+            kernel_initializer = layer.kernel_initializer
+            bias_initializer = layer.bias_initializer
+            
+            # Reinitialize weights
+            if hasattr(layer, 'kernel'):
+                layer.kernel.assign(kernel_initializer(shape=layer.kernel.shape))
+            if hasattr(layer, 'bias'):
+                layer.bias.assign(bias_initializer(shape=layer.bias.shape))
 
     new_model.compile(optimizer=Adam(learning_rate=learning_rate), loss="mae")
 
@@ -819,7 +824,54 @@ class StepResult(models.Model):
 
         return step_results
 
+def create_attention(input_shape, output_steps, num_features):
+    # Encoder
+    encoder_inputs = Input(shape=(None, input_shape))
+    encoder_lstm1 = LSTM(units=25, return_sequences=True, activation='tanh')(encoder_inputs)
+    encoder_lstm2, state_h, state_c = LSTM(units=50, return_sequences=True, return_state=True, activation='tanh')(encoder_lstm1)
+
+    # Attention mechanism
+    attention = tf.keras.layers.Attention()
+    # Decoder
+    # Initialize LSTM decoder layer
+    decoder_lstm = LSTM(units=50, return_sequences=False, return_state=True, activation='tanh')
 
 
+    all_decoder_outputs = []
+    decoder_input = tf.zeros_like(encoder_inputs[:, 0, :])  # Initial decoder input, zeros
+    decoder_dense = TimeDistributed(Dense(num_features))
+
+    # Initial states for the decoder LSTM
+    decoder_states = [state_h, state_c]
+
+    for _ in range(output_steps):
+        # Prepare a query for the attention layer
+        # Use a dense layer to transform the decoder state to the correct shape
+        query_dense = Dense(50)  # Transform to match the encoder output dimension
+        query = query_dense(decoder_states[0])  # Apply transformation to hidden state
+        query = tf.expand_dims(query, 1)  # Expand dims to fit attention layer
+
+        # Computing a context vector using attention mechanism
+        context_vector, attention_weights = attention([query, encoder_lstm2], return_attention_scores=True)
+
+        # Pass the context vector and previous states to LSTM decoder
+        decoder_output, state_h, state_c = decoder_lstm(context_vector, initial_state=decoder_states)
+        
+        # Reshape decoder output and store
+        decoder_output = tf.expand_dims(decoder_output, 1)
+        decoder_output = decoder_dense(decoder_output)
+        all_decoder_outputs.append(decoder_output)
+
+        # Update the decoder input for the next timestep
+        decoder_input = tf.squeeze(decoder_output, axis=1)
+        decoder_states = [state_h, state_c]
+
+    # Concatenate all predictions
+    decoder_outputs = Concatenate(axis=1)(all_decoder_outputs)
+
+    model = Model(encoder_inputs, decoder_outputs)
+    model.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
+
+    return model
 
         
