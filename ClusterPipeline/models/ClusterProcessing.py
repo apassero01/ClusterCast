@@ -112,8 +112,7 @@ class ClusterGroupParams(models.Model):
     def initialize(self):
         self.X_cols = None
         self.y_cols = None
-        self.X_feature_sets = None
-        self.y_feature_sets = None
+        self.data_sets = [] 
         self.train_seq_elements = None
         self.test_seq_elements = None
         self.name = str(self.tickers) + str(self.start_date) + "-" + str(self.end_date) + str(self.n_steps) +"steps"
@@ -212,16 +211,22 @@ class StockClusterGroup(ClusterGroup):
         '''
         Method to create a StockDataSet object from the group_params
         '''
-        self.data_set = StockDataSet(self.group_params)
-        self.data_set.preprocess_pipeline() 
-        self.group_params = self.data_set.group_params
+        self.data_sets = [] 
+        for ticker in self.group_params.tickers:
+            self.data_set = StockDataSet(self.group_params, ticker)
+            self.data_set.preprocess_pipeline()
+            self.data_sets.append(self.data_set)
+            self.group_params = self.data_set.group_params
+        
+        self.group_params.data_sets = self.data_sets
 
     
     def create_sequence_set(self):
         '''
         Method to create a StockSequenceSet object from the data_set
         '''
-        self.sequence_set = self.data_set.create_sequence_set() 
+
+        self.sequence_set = StockSequenceSet(self.group_params)
         self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
         self.group_params = self.sequence_set.group_params
     
@@ -241,7 +246,7 @@ class StockClusterGroup(ClusterGroup):
         if alg == 'TSKM':
             # n_clusters = self.determine_n_clusters(X_train_cluster,metric)
             n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
-            # n_clusters = 35
+            # n_clusters = 1
             self.cluster_alg = TimeSeriesKMeans(n_clusters=n_clusters, metric=metric,random_state=3)
         
         self.train_labels = list(self.cluster_alg.fit_predict(X_train_cluster))
@@ -260,6 +265,9 @@ class StockClusterGroup(ClusterGroup):
             raise ValueError("The number of labels does not match the number of sequences")
         if len(self.test_labels) != len(test_seq_elements):
             raise ValueError("The number of labels does not match the number of sequences")
+
+        # np.random.shuffle(self.train_labels)
+        # np.random.shuffle(self.test_labels)
 
         for i in range(len(train_seq_elements)):
             seq_element = train_seq_elements[i]
@@ -338,9 +346,11 @@ class StockClusterGroup(ClusterGroup):
         # model_features = ['pctChgclose_cumulative','pctChgvolume_cumulative']
         # model_features = ['pctChgclose', 'pctChgvolume','sumpctChgclose_6','sumpctChgvolume_6','sumpctChgema50_1','sumpctChgema10_1','sumpctChgema50_6','sumpctChgema10_6']
         model = None 
+        # print(model_features)
         if fine_tune:
             self.train_general_model(model_features)
             model = self.general_model
+            
         
         self.filtered_clusters = []
 

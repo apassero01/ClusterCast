@@ -35,33 +35,26 @@ class DataSet:
     same shape and size with the same features.
     """
     def __init__(self,group_params):
-        self.dfs = []
         self.df = pd.DataFrame()
         self.group_params = group_params
 
         self.initialize_group_params() 
 
-        self.training_dfs = []
-        self.test_dfs = []
+        self.training_df = pd.DataFrame()
+        self.test_df = pd.DataFrame()
 
         self.created_dataset = False
         self.created_features = False
         self.created_y_targets = False
 
         self.scaling_dict = group_params.get_scaling_dict()
+
+        self.X_feature_sets = []
+        self.y_feature_sets = []
     
     def initialize_group_params(self):
         self.group_params.X_cols = set() 
         self.group_params.y_cols = set()
-        self.group_params.X_feature_sets = [] # list of feature sets
-        self.group_params.y_feature_sets = [] # list of feature sets
-
-    def update_total_df(self):
-        """
-        Update the total dataframe with all the dataframes in the dataset
-        """
-        self.df = pd.DataFrame()
-        self.df = pd.concat(self.dfs, axis=0)
     
     def create_dataset(self):
         """
@@ -95,8 +88,9 @@ class StockDataSet(DataSet):
     In the case of stocks this is 1 or more stock dataframes that are combined into one dataset
     """
 
-    def __init__(self, group_params, interval="1d"):
+    def __init__(self, group_params, ticker):
         super().__init__(group_params)
+        self.ticker = ticker
     
     def preprocess_pipeline(self):
         """
@@ -104,7 +98,7 @@ class StockDataSet(DataSet):
         """
         if not self.created_dataset:
             self.create_dataset()
-            if len(self.dfs) < 0 :
+            if len(self.df) < 1 :
                 raise ValueError("No dataframes created")
         if not self.created_features:
             self.create_features()
@@ -116,22 +110,28 @@ class StockDataSet(DataSet):
 
         self.train_test_split()
 
-        if self.training_dfs is None or len(self.training_dfs) < 1: 
+        if len(self.training_df) < 1: 
             raise ValueError("training_set is None")
-        if self.test_dfs is None or len(self.test_dfs) < 1:
+        if len(self.test_df) < 1:
             raise ValueError("test_set is None")
 
-        quant_min_max_feature_sets = [feature_set for feature_set in self.group_params.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value] 
-        quant_min_max_feature_sets += [feature_set for feature_set in self.group_params.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
+        quant_min_max_feature_sets = [feature_set for feature_set in self.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value] 
+        quant_min_max_feature_sets += [feature_set for feature_set in self.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
 
         if len(quant_min_max_feature_sets) > 0:
-            self.training_dfs, self.test_dfs = self.scale_quant_min_max(quant_min_max_feature_sets, self.training_dfs, self.test_dfs)
+            self.training_df, self.test_df = self.scale_quant_min_max(quant_min_max_feature_sets, self.training_df, self.test_df)
         
         
-        if self.group_params.X_feature_sets is None: 
-            raise ValueError("X_feature_sets is None")
-        if self.group_params.y_feature_sets is None:
-            raise ValueError("y_feature_sets is None")
+        if len(self.group_params.X_cols) < 1:
+            raise ValueError("No features created")
+        if len(self.group_params.y_cols) < 1:
+            raise ValueError("No target features created")
+        if len(self.X_feature_sets) < 1:
+            raise ValueError("No X_feature_sets created")
+        if len(self.y_feature_sets) < 1:
+            raise ValueError("No y_feature_sets created")
+        
+
 
     def create_dataset(self):
         """
@@ -140,14 +140,10 @@ class StockDataSet(DataSet):
         if self.created_dataset:
             return
 
-        self.dfs = []
 
-        for ticker in self.group_params.tickers:
-            stock_df, cols = get_stock_data(ticker, self.group_params.start_date, self.group_params.end_date, self.group_params.interval)
-            self.dfs.append(stock_df)
+        self.df, cols = get_stock_data(self.ticker, self.group_params.start_date, self.group_params.end_date, self.group_params.interval)
 
         self.group_params.X_cols.update(cols)
-        self.update_total_df()
 
         self.created_dataset = True
 
@@ -162,43 +158,35 @@ class StockDataSet(DataSet):
         X_cols = set() 
 
         # Create price features
-        for i in range(len(self.dfs)):
-            df, feature_set = create_price_vars(self.dfs[i],scaling_method=self.scaling_dict['price_vars'])
-            self.dfs[i] = df
-        X_feature_sets.append(feature_set)
+        self.df, feature_set = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'])
+
+        self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create trend features
-        for i in range(len(self.dfs)):
-            df, feature_set = create_trend_vars(self.dfs[i],scaling_method=self.scaling_dict['trend_vars'])
-            self.dfs[i] = df
-        X_feature_sets.append(feature_set)
+        self.df, feature_set = create_trend_vars(self.df,scaling_method=self.scaling_dict['trend_vars'])
+
+        self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create percent change variables 
-        for i in range(len(self.dfs)):
-            df, feature_set = create_pctChg_vars(self.dfs[i],scaling_method=self.scaling_dict['pctChg_vars'])
-            self.dfs[i] = df
-        X_feature_sets.append(feature_set)
+        self.df, feature_set = create_pctChg_vars(self.df,scaling_method=self.scaling_dict['pctChg_vars'])
+        self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create rolling sum variables
         pctChg_cols = [col for col in X_cols if "pctChg" in col]
         
         for col in pctChg_cols: 
-            for i in range(len(self.dfs)):
-                df, feature_set = create_rolling_sum_vars(self.dfs[i], col, scaling_method=self.scaling_dict['rolling_vars'])
-                self.dfs[i] = df
-            X_feature_sets.append(feature_set)
+            self.df, feature_set = create_rolling_sum_vars(self.df, col, scaling_method=self.scaling_dict['rolling_vars'])
+            self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
         
         # print(df.tail())
 
-        # Update the group params with the new feature sets and columns
-        self.group_params.X_feature_sets = X_feature_sets
-        self.group_params.X_cols = X_cols
+        # Update the group params with the new  columns
+        self.group_params.X_cols.update(X_cols)
 
-        self.update_total_df()
         self.created_features = True
     
     def train_test_split(self,feature_list = None, training_percentage = 0.8):
@@ -206,28 +194,19 @@ class StockDataSet(DataSet):
         if not feature_list:
             feature_list = list(self.group_params.X_cols.union(self.group_params.y_cols))
 
-        for df in self.dfs:
-            training_df, test_df = df_train_test_split(df, feature_list, training_percentage)
-            self.training_dfs.append(training_df)
+            self.training_df, self.test_df = df_train_test_split(self.df, feature_list, training_percentage)
             # test_df = test_df.iloc[self.n_steps:,:] # Remove the first n_steps rows to prevent data leakage
             #TODO mininmal data leakage needs to be addressed, when refactored, this class does not know the steps
-            self.test_dfs.append(test_df)
 
-    def scale_quant_min_max(self,feature_sets, training_dfs, test_dfs):
+    def scale_quant_min_max(self,feature_sets, training_df, test_df):
         """
         Scales the features in the feature sets in dataframe form using custom MinMaxPercentileScaler
         """
 
-        training_dfs = [df.copy() for df in training_dfs]
-        test_dfs = [df.copy() for df in test_dfs]
 
-        combined_train_df = pd.DataFrame()
-        combined_test_df = pd.DataFrame()
+        training_df = training_df.copy()
+        test_df = test_df.copy()
 
-        #Combine all the training and test dataframes into one dataframe
-        for i in range(len(training_dfs)):
-            combined_train_df = pd.concat([combined_train_df,training_dfs[i]],axis = 0)
-            combined_test_df = pd.concat([combined_test_df,test_dfs[i]],axis = 0)
         
         #Scale the features in the feature sets
         for feature_set in feature_sets: 
@@ -235,22 +214,17 @@ class StockDataSet(DataSet):
                 scaler = MinMaxPercentileScaler()
             if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value:
                 scaler = MinMaxPercentileScaler(scaling_mode = 'global')
-            scaler.fit(combined_train_df[feature_set.cols])
+            scaler.fit(training_df[feature_set.cols])
 
             # After fitting the scaler to the combined training dataframe, transform the individual dataframes
-            for i in range(len(training_dfs)):
-                training_set = training_dfs[i]
-                test_set = test_dfs[i]
-                    
-                training_set[feature_set.cols] = scaler.transform(training_set[feature_set.cols])
-                test_set[feature_set.cols] = scaler.transform(test_set[feature_set.cols])
+                
+            training_df[feature_set.cols] = scaler.transform(training_df[feature_set.cols])
+            test_df[feature_set.cols] = scaler.transform(test_df[feature_set.cols])
 
-                training_dfs[i] = training_set
-                test_dfs[i] = test_set
             feature_set.scaler = scaler
         
         
-        return training_dfs, test_dfs
+        return training_df, test_df
 
     def create_y_targets(self, cols_to_create_targets):
         """
@@ -262,14 +236,11 @@ class StockDataSet(DataSet):
         if self.created_y_targets:
             return
         
-        for i in range(len(self.dfs)):
-            df, feature_set = add_forward_rolling_sums(self.dfs[i], cols_to_create_targets, scaling_method=self.scaling_dict['target_vars'])
-            self.dfs[i] = df
+        self.df, feature_set = add_forward_rolling_sums(self.df, cols_to_create_targets, scaling_method=self.scaling_dict['target_vars'])
 
-        self.group_params.y_feature_sets.append(feature_set)
+        self.y_feature_sets.append(feature_set)
         self.group_params.y_cols.update(feature_set.cols)
-        self.update_total_df()
-        self.created_y_targets = True
+        self.created_y_targets = True 
 
     def create_sequence_set(self):
         seq = StockSequenceSet(self.group_params, self.training_dfs,self.test_dfs)
@@ -520,6 +491,7 @@ def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = S
     feature_set = FeatureSet(scaling_method)
 
     max_shift = -1
+    # print(df.tail())
 
     for col in columns:
         # Extract the number X from the column name
@@ -532,13 +504,14 @@ def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = S
     
         shifted_col = df[col].shift(-num_rows_ahead)
 
-        shifted_col.fillna(np.nan, inplace=True)
+
 
         df[new_col_name] = shifted_col
 
         max_shift = max(max_shift, num_rows_ahead)
-    
-    df = df.iloc[:-max_shift]
+
+
+    print(df.tail())
 
 
     return df, feature_set

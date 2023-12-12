@@ -65,11 +65,20 @@ class ScalingMethod(Enum):
 
 
 class SequenceSet: 
-    def __init__(self,group_params, training_dfs, test_dfs) -> None:
+    def __init__(self,group_params) -> None:
 
         self.group_params = group_params
-        self.training_dfs = training_dfs
-        self.test_dfs = test_dfs
+        
+        self.data_sets = group_params.data_sets
+
+        print(len(self.data_sets))
+
+        self.training_dfs = [data_set.training_df for data_set in self.data_sets]
+        self.test_dfs = [data_set.test_df for data_set in self.data_sets]
+
+        print(len(self.training_dfs))
+
+
     
     def set_n_steps(self,n_steps):
         self.n_steps = n_steps
@@ -78,8 +87,8 @@ class SequenceSet:
         pass
 
 class StockSequenceSet(SequenceSet):
-    def __init__(self,group_params,training_dfs,test_dfs) -> None:
-        super().__init__(group_params=group_params,training_dfs=training_dfs,test_dfs=test_dfs)
+    def __init__(self,group_params) -> None:
+        super().__init__(group_params=group_params)
     
     def create_combined_sequence(self):
         '''
@@ -115,18 +124,23 @@ class StockSequenceSet(SequenceSet):
                 future_seq_elements += future_seq_elements
 
 
+        x_quant_min_max_feature_sets = []
+        y_quant_min_max_feature_sets = []
         
         # For QUANT_MIN_MAX features, the scaling occurs before the sequence is created, so we need to add the already scaled feature sets to the new sequence elements
-        x_quant_min_max_feature_sets = [feature_set for feature_set in self.group_params.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value] 
-        y_quant_min_max_feature_sets = [feature_set for feature_set in self.group_params.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value]  
-        x_quant_min_max_feature_sets += [feature_set for feature_set in self.group_params.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
-        y_quant_min_max_feature_sets += [feature_set for feature_set in self.group_params.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
+        for data_set in self.data_sets: 
+            curTicker = data_set.ticker
+            x_quant_min_max_feature_sets = [feature_set for feature_set in data_set.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value] 
+            y_quant_min_max_feature_sets = [feature_set for feature_set in data_set.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value]  
+            x_quant_min_max_feature_sets = [feature_set for feature_set in data_set.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
+            y_quant_min_max_feature_sets = [feature_set for feature_set in data_set.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
 
-        [seq_element.X_feature_sets.extend(x_quant_min_max_feature_sets) for seq_element in train_seq_elements]
-        [seq_element.X_feature_sets.extend(x_quant_min_max_feature_sets) for seq_element in test_seq_elements]
-        [seq_element.y_feature_sets.extend(y_quant_min_max_feature_sets) for seq_element in train_seq_elements]
-        [seq_element.y_feature_sets.extend(y_quant_min_max_feature_sets) for seq_element in test_seq_elements]
-        
+            [seq_element.X_feature_sets.extend(x_quant_min_max_feature_sets) for seq_element in train_seq_elements if seq_element.ticker == curTicker]
+            [seq_element.X_feature_sets.extend(x_quant_min_max_feature_sets) for seq_element in test_seq_elements if seq_element.ticker == curTicker]
+            [seq_element.y_feature_sets.extend(y_quant_min_max_feature_sets) for seq_element in train_seq_elements if seq_element.ticker == curTicker]
+            [seq_element.y_feature_sets.extend(y_quant_min_max_feature_sets) for seq_element in test_seq_elements if seq_element.ticker == curTicker]
+            
+     
         self.group_params.X_feature_dict = X_feature_dict
         self.group_params.y_feature_dict = y_feature_dict
         self.group_params.train_seq_elements = train_seq_elements
@@ -225,11 +239,12 @@ class StockSequenceSet(SequenceSet):
 
 
         if add_cuma_pctChg_features:
-            pct_Chg_feautures = (filter(lambda feature_set: feature_set.name == 'pctChg_vars' or feature_set.name == 'rolling_pctChg_vars', self.group_params.X_feature_sets))
-            for pct_Chg_feauture in pct_Chg_feautures:
-                cuma_feature_set = self.add_cuma_pctChg_features(pct_Chg_feauture)
-                self.group_params.X_feature_sets.append(cuma_feature_set)
-                self.group_params.X_cols.update(cuma_feature_set.cols)
+            for data_set in self.data_sets:
+                pct_Chg_feautures = (filter(lambda feature_set: feature_set.name == 'pctChg_vars' or feature_set.name == 'rolling_pctChg_vars', data_set.X_feature_sets))
+                for pct_Chg_feauture in pct_Chg_feautures:
+                    cuma_feature_set = self.add_cuma_pctChg_features(pct_Chg_feauture)
+                    data_set.X_feature_sets.append(cuma_feature_set)
+                    self.group_params.X_cols.update(cuma_feature_set.cols)
 
 
 
@@ -254,28 +269,38 @@ class SequenceScaler:
         '''
         Scales the sequences according to scaling method specified in the feature sets
         '''     
-        X_feature_sets = self.group_params.X_feature_sets
-        y_feature_sets = self.group_params.y_feature_sets
         train_seq_elements = self.group_params.train_seq_elements
         test_seq_elements = self.group_params.test_seq_elements
 
-        #Then scale the SBS features in sequence form
-        x_sbs_feature_sets = [feature_set for feature_set in X_feature_sets if feature_set.scaling_method.value == ScalingMethod.SBS.value]
-        if len(x_sbs_feature_sets) > 0:
-            train_seq_elements, test_seq_elements = self.scale_sbs(x_sbs_feature_sets,train_seq_elements,test_seq_elements)
+        new_train_seq_elements = []
+        new_test_seq_elements = []
 
-        #Then scale the sbs features in sequence form
-        x_sbsg_feature_sets = [feature_set for feature_set in X_feature_sets if feature_set.scaling_method.value == ScalingMethod.SBSG.value]
-        if len(x_sbsg_feature_sets) > 0:
-            train_seq_elements, test_seq_elements = self.scale_sbsg(x_sbsg_feature_sets,train_seq_elements,test_seq_elements)
+        for data_set in self.group_params.data_sets: 
+            X_feature_sets = data_set.X_feature_sets
+            y_feature_sets = data_set.y_feature_sets
 
-        #Then scale the y features in sequence form
-        y_sbs_feature_sets = [feature_set for feature_set in y_feature_sets if feature_set.scaling_method.value == ScalingMethod.SBS.value]
-        if len(y_sbs_feature_sets) > 0:
-            train_seq_elements, test_seq_elements = self.y_scale_sbs(y_sbs_feature_sets,train_seq_elements,test_seq_elements)
+            cur_train_seq_elements = [seq_element for seq_element in train_seq_elements if seq_element.ticker == data_set.ticker]
+            cur_test_seq_elements = [seq_element for seq_element in test_seq_elements if seq_element.ticker == data_set.ticker]
 
-        return train_seq_elements, test_seq_elements
-        
+            #Then scale the SBS features in sequence form
+            x_sbs_feature_sets = [feature_set for feature_set in X_feature_sets if feature_set.scaling_method.value == ScalingMethod.SBS.value]
+            if len(x_sbs_feature_sets) > 0:
+                cur_train_seq_elements, cur_test_seq_elements = self.scale_sbs(x_sbs_feature_sets,cur_train_seq_elements,cur_test_seq_elements)
+
+            #Then scale the sbs features in sequence form
+            x_sbsg_feature_sets = [feature_set for feature_set in X_feature_sets if feature_set.scaling_method.value == ScalingMethod.SBSG.value]
+            if len(x_sbsg_feature_sets) > 0:
+                cur_train_seq_elements, cur_test_seq_elements = self.scale_sbsg(x_sbsg_feature_sets,cur_train_seq_elements,cur_test_seq_elements)
+
+            #Then scale the y features in sequence form
+            y_sbs_feature_sets = [feature_set for feature_set in y_feature_sets if feature_set.scaling_method.value == ScalingMethod.SBS.value]
+            if len(y_sbs_feature_sets) > 0:
+                cur_train_seq_elements, cur_test_seq_elements = self.y_scale_sbs(y_sbs_feature_sets,cur_train_seq_elements,cur_test_seq_elements)
+            
+            new_train_seq_elements += cur_train_seq_elements
+            new_test_seq_elements += cur_test_seq_elements
+
+        return new_train_seq_elements, new_test_seq_elements
     
     def scale_sbs(self,feature_sets,train_seq_elements,test_seq_elements):
         """
@@ -444,12 +469,14 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
         # Get sequence for y from the row at end_idx-1 of sequence for the columns in y_cols
         seq_y = sequence[end_idx, y_indices_df]
             
-        start_date = dates[i]
-        end_date = dates[end_idx - 1]
+        start_date = dates[start_index]
+        end_date = dates[end_idx]
 
         sequence_element = SequenceElement(seq_x, seq_y, X_feature_dict, y_feature_dict, isTrain, start_date, end_date, ticker)
 
-        if seq_y[-1] == np.nan:
+        # print(seq_y)
+        if np.isnan(seq_y[-1]):
+            print("nan")
             future_seq_elements.append(sequence_element)
         else:
             sequence_elements.append(sequence_element)

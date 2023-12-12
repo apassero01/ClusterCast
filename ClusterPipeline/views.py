@@ -46,9 +46,9 @@ def home(request):
         scaling_dict = {
             'price_vars': SP.ScalingMethod.SBSG,
             'trend_vars' : SP.ScalingMethod.SBS,
-            'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX,
+            'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX_G,
             'rolling_vars' : SP.ScalingMethod.QUANT_MINMAX_G,
-            'target_vars' : SP.ScalingMethod.QUANT_MINMAX
+            'target_vars' : SP.ScalingMethod.QUANT_MINMAX_G
         }
 
         # Process the data (this is where you would include your logic)
