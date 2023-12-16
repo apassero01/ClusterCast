@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404, redirect
 import json
 from django.http import JsonResponse
 from .models import SequencePreprocessing as SP
@@ -12,6 +12,7 @@ from django.db import transaction
 from django.http import HttpResponse
 import ast
 from .thread import CreateGroupBackground
+from django.core.cache import cache
 
 
 # Create your views here.
@@ -189,29 +190,79 @@ def cluster_run(request):
     # If it's a GET request, just render the page as usual
     return render(request, 'ClusterPipeline/create_run.html',context)
 
+# @csrf_exempt
+# def cluster_group(request):
+#     cluster_group_list = CP.StockClusterGroup.objects.all()
+#     item_list = [(item.pk, item.group_params.name) for item in cluster_group_list]
+#     if request.method == 'POST':
+#         data = json.loads(request.body)
+#         group_data_string = (data['cluster_group'])
+#         group_data = ast.literal_eval(group_data_string)
+#         id = group_data[0]
+#         print(id)
+
+#         cluster_group = CP.StockClusterGroup.objects.get(pk=id)
+        
+#         cluster_results = [] 
+#         cluster_group.load_saved_group()
+#         for cluster in cluster_group.clusters: 
+#             fig1 = cluster.visualize_cluster()
+#             fig2 = cluster.visualize_future_distribution()
+#             fig1_json = json.loads(plotly.io.to_json(fig1))
+#             fig2_json = json.loads(plotly.io.to_json(fig2))
+#             metrics = cluster.generate_results()
+#             cluster_results.append([(fig1_json,fig2_json),metrics])
+#             # print(cluster_results[-1])
+        
+#         return JsonResponse({'results': cluster_results})
+#     return render(request, 'ClusterPipeline/cluster_group.html',{'menu_items': item_list})
+
+
 @csrf_exempt
-def cluster_group(request):
-    cluster_group_list = CP.StockClusterGroup.objects.all()
-    item_list = [(item.pk, item.group_params.name) for item in cluster_group_list]
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        group_data_string = (data['cluster_group'])
-        group_data = ast.literal_eval(group_data_string)
+def cluster_group(request): 
+    if request.method == 'GET': 
+        cluster_group_list = CP.StockClusterGroup.objects.all()
+        item_list = [(item.pk, item.group_params.name) for item in cluster_group_list]
+        return render(request, 'ClusterPipeline/cluster_group.html',{'menu_items': item_list})
+    elif request.method == 'POST': 
+        cluster_group_value = request.POST.get('cluster_group')
+        group_data = ast.literal_eval(cluster_group_value)
         id = group_data[0]
         print(id)
+        return redirect('cluster_group_detail', id=id)
 
+@csrf_exempt
+def cluster_group_detail(request, id): 
+
+    cluster_group = get_cluster_group(id)
+    
+    cluster_results = [] 
+    
+    for cluster in cluster_group.clusters: 
+        fig1 = cluster.visualize_cluster()
+        fig2 = cluster.visualize_future_distribution()
+        fig1_json = json.loads(plotly.io.to_json(fig1))
+        fig2_json = json.loads(plotly.io.to_json(fig2))
+        metrics = cluster.generate_results()
+        cluster_results.append([(fig1_json,fig2_json),metrics])
+    cluster_results = json.dumps(cluster_results)
+
+    item_list = [(item.pk, item.group_params.name) for item in CP.StockClusterGroup.objects.all()]
+
+    return render(request, 'ClusterPipeline/cluster_group_detail.html',{'results': cluster_results, 'menu_items': item_list})
+
+
+def get_cluster_group(id):
+    cluster_group = cache.get(f'cluster_group_{id}')
+
+    if not cluster_group:
         cluster_group = CP.StockClusterGroup.objects.get(pk=id)
-        
-        cluster_results = [] 
         cluster_group.load_saved_group()
-        for cluster in cluster_group.clusters: 
-            fig1 = cluster.visualize_cluster()
-            fig2 = cluster.visualize_future_distribution()
-            fig1_json = json.loads(plotly.io.to_json(fig1))
-            fig2_json = json.loads(plotly.io.to_json(fig2))
-            metrics = cluster.generate_results()
-            cluster_results.append([(fig1_json,fig2_json),metrics])
-            # print(cluster_results[-1])
-        
-        return JsonResponse({'results': cluster_results})
-    return render(request, 'ClusterPipeline/cluster_group.html',{'menu_items': item_list})
+        cache.set(f'cluster_group_{id}', cluster_group, 60*60*15)
+    
+    return cluster_group
+
+
+@csrf_exempt
+def cluster_detail(request,id):
+    return render(request, 'ClusterPipeline/cluster_detail.html', {'cluster_id': id})

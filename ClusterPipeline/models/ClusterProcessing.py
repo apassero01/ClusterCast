@@ -474,6 +474,8 @@ class Cluster(models.Model):
         self.train_seq_elements = train_seq_elements
         self.test_seq_elements = test_seq_elements
         self.get_3d_array()
+        self.group_name = self.cluster_group.group_params.name
+        self.model_file_string = f"SavedModels/{self.group_name}/Cluster{self.label}/"
 
     def get_3d_array(self):
         '''
@@ -492,10 +494,6 @@ class Cluster(models.Model):
         '''
         Method to serialize the cluster. This method saves the model and the sequences to the database
         '''
-        group_name = self.cluster_group.group_params.name
-    
-        self.model_file_string = f"SavedModels/{group_name}/Cluster{self.label}/"
-
 
         # Check if the directory exists
         if not os.path.exists(self.model_file_string):
@@ -504,16 +502,14 @@ class Cluster(models.Model):
             os.makedirs(self.model_file_string)
 
         print("Saving model to " + self.model_file_string)  
-        with open(self.model_file_string+"Model.pkl", 'wb') as f:
-            pickle.dump(self.model, f)
+        self.model.save(self.model_file_string)
     
     
     def deserialize_model(self):
         '''
         Method to load the model from the database
         '''
-        with open(self.model_file_string, 'rb') as f:
-            self.model = pickle.load(f)
+        self.model = tf.keras.models.load_model(self.model_file_string + "model.h5")
 
 class StockCluster(Cluster):
     '''
@@ -633,7 +629,7 @@ class StockCluster(Cluster):
 
         # Train the model with early stopping
 
-        self.model.fit(X_train_filtered, y_train, epochs=500, batch_size=32, validation_data=(X_test_filtered, y_test))
+        self.model.fit(X_train_filtered, y_train, epochs=500, batch_size=32, validation_data=(X_test_filtered, y_test),model_dir = self.model_file_string)
 
         predicted_y = self.model.predict(X_test_filtered)
         print(predicted_y.shape)

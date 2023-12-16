@@ -4,7 +4,10 @@ from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.backend import clear_session
 from enum import Enum
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, TensorBoard
+import os
+
+import io
 
 class ModelTypes(Enum):
     Traditional = 1
@@ -110,9 +113,15 @@ class RNNModel:
         new_model.compile(loss='mae', optimizer=Adam(learning_rate=0.001))
         self.model = new_model
     
-    def fit(self,X_train,y_train,validation_data = None,epochs=100,batch_size=32):
+    def fit(self,X_train,y_train,validation_data = None,epochs=100,batch_size=32,model_dir = None):
                 # After building the model
-        print(self.model.summary())
+
+        self.summary_string = []
+        self.model.summary(print_fn=lambda x: self.summary_string.append(x))
+        self.summary_string = "\n".join(self.summary_string)
+
+        print(self.summary_string)
+       
 
         # Before training, inspect the shape of training and validation data
         print("Training data shape:", X_train.shape, y_train.shape)
@@ -125,12 +134,23 @@ class RNNModel:
             restore_best_weights=True  # Restore model weights to the best epoch
         )
 
+        if not os.path.exists(model_dir+'/log_dir'):
+            os.makedirs(model_dir+'/log_dir')
+
+        callbacks = [
+            TensorBoard(log_dir=model_dir+'/log_dir', histogram_freq=1),
+        ]
+        callbacks.append(early_stopping)
+
         # Train the model with early stopping
 
-        self.model.fit(X_train,y_train,epochs=epochs,batch_size=batch_size,validation_data=validation_data,callbacks=[early_stopping])
+        self.model.fit(X_train,y_train,epochs=epochs,batch_size=batch_size,validation_data=validation_data,callbacks=callbacks)
     
     def predict(self,X):
         return self.model.predict(X)
+    
+    def save(self,model_dir):
+        self.model.save(model_dir+'model.h5')
     
 
     # def build_

@@ -7,6 +7,13 @@
     width: 100%; /* Full width of the parent container */
     margin-bottom: 20px; /* Space between each pair */
     box-sizing: border-box; /* Include padding and border in the element's width */
+    background-color: rgba(211, 211, 211, 0.5); /* Light grey with transparency */
+    transition: background-color 0.3s; 
+    padding: 10px; 
+}
+
+.graph-text-pair-container:hover {
+    background-color: rgba(169, 169, 169, 0.5); /* Darker grey on hover */
 }
 
 .graph-container {

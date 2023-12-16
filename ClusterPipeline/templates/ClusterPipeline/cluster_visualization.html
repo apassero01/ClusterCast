@@ -1,5 +1,5 @@
 <!-- data_visualization_template.html -->
-
+{% load static %}
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
 
@@ -25,7 +25,7 @@ function renderVisualization(data) {
         dataVisualizationContainer.innerHTML = '';
 
         // Iterate over each data result pair
-        data.results.forEach(pair => {
+        data.forEach((pair,index) => {
             const [fig, metrics] = pair;
 
             // unpack tuple of figs to fig1 fig3
@@ -57,6 +57,10 @@ function renderVisualization(data) {
             // textContainer.appendChild(p);
             graphContainer = document.createElement('div');
             graphContainer.classList.add('graph-container');
+
+            pairContainer.addEventListener('click',function() {
+                window.location.href = `/cluster/${index}/`;
+            })
             
 
             // Append the graph container to the pair container
@@ -65,7 +69,6 @@ function renderVisualization(data) {
             Plotly.newPlot(graphContainer, fig2.data, fig2.layout, {responsive: true});
             // text();
             populateTextDataContainer(metrics,pairContainer);
-
         });
     } else {
         console.error('data-visualization container not found');

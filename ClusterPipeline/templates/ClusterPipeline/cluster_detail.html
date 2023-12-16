@@ -19,23 +19,9 @@
 
 
 {% block content %}
-    <!-- Include the cluster visualization template -->
-
-
-        <!-- Left side content (if exists) -->
-
 
     <div class="top-content">
-        <!-- Other content goes here -->
-        <form method="post" action="{% url 'ClusterCast-cluster-group' %}">
-            {% csrf_token %}
-            <select id="dataSelection" name="cluster_group">
-                {% for item in menu_items %}
-                    <option value="{{ item }}">{{ item }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit" id="loadDataButton" onclick="showLoader()">Load Data</button>
-        </form>
+        cluster
     </div>
 
 {% endblock content %}

@@ -14,6 +14,23 @@
             padding: 20px;
             box-sizing: border-box;
         }
+        .data-visualization {
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            width: 100%; /* Full width of the parent */
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto; /* Vertical scroll for overflow */
+        }
+        .parent-container {
+            display: flex;
+            flex-direction: column; /* Align children horizontally */
+            height: calc(100% - 50px); /* Adjust based on header height */
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            color: #3498db ;
+        }
     </style>
 {% endblock extrahead %}
 
@@ -38,4 +55,18 @@
         </form>
     </div>
 
+    <!-- Data visualization container -->
+    <div class="data-visualization">
+        <!-- Include the cluster visualization template -->
+        {% include 'ClusterPipeline/cluster_visualization.html' %}
+    </div>
+
+    <script>
+        const rawData = '{{ results|safe }}';
+        const data = JSON.parse(rawData);
+        document.addEventListener('DOMContentLoaded', function() {
+            // Call the renderVisualization function with the response data
+            renderVisualization(data);
+        });
+    </script>
 {% endblock content %}
