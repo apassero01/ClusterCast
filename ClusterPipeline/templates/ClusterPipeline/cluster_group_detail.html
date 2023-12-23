@@ -63,10 +63,27 @@
 
     <script>
         const rawData = '{{ results|safe }}';
+        console.log(rawData)
         const data = JSON.parse(rawData);
         document.addEventListener('DOMContentLoaded', function() {
             // Call the renderVisualization function with the response data
             renderVisualization(data);
+
+            const pathName = window.location.pathname;
+
+            // Split the pathname by '/' and filter out any empty strings
+            const pathSegments = pathName.split('/').filter(segment => segment);
+
+            // Assuming the ID is always the last segment
+            const id = pathSegments[pathSegments.length - 1];
+            
+            const textContainers = document.querySelectorAll('.text-data-container');
+
+            textContainers.forEach(function(div, index) {
+                div.addEventListener('click', function() {
+                    window.location.href = `/cluster/${id}/${index}/`;
+                });
+            });
         });
     </script>
 {% endblock content %}

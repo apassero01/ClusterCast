@@ -71,12 +71,8 @@ class SequenceSet:
         
         self.data_sets = group_params.data_sets
 
-        print(len(self.data_sets))
-
         self.training_dfs = [data_set.training_df for data_set in self.data_sets]
         self.test_dfs = [data_set.test_df for data_set in self.data_sets]
-
-        print(len(self.training_dfs))
 
 
     
@@ -118,11 +114,9 @@ class StockSequenceSet(SequenceSet):
                 ticker = tickers[i]
                 train_elements, X_feature_dict, y_feature_dict, future_seq_elements = create_sequence(training_set, X_cols, y_cols, n, ticker, isTrain = True)
                 test_elements, X_feature_dict, y_feature_dict, future_seq_elements = create_sequence(test_set, X_cols, y_cols, n, ticker, isTrain = False)
-                print(train_elements[0].seq_x.shape)
                 train_seq_elements += train_elements
                 test_seq_elements += test_elements
                 future_seq_elements += future_seq_elements
-
 
         x_quant_min_max_feature_sets = []
         y_quant_min_max_feature_sets = []
@@ -211,6 +205,8 @@ class StockSequenceSet(SequenceSet):
         return X_train, y_train, X_test, y_test
     
     def preprocess_pipeline(self,add_cuma_pctChg_features = False):
+
+        print("Creating Sequences")
         self.create_combined_sequence()
 
         if self.group_params.train_seq_elements is None or self.group_params.test_seq_elements is None:
@@ -226,7 +222,9 @@ class StockSequenceSet(SequenceSet):
         if len(self.group_params.train_seq_elements[0].seq_y) < 1 or len(self.group_params.test_seq_elements[0].seq_y) < 1:
             raise ValueError("Sequence elements have not been created")
 
+        print("Scaling Sequences")
         self.scale_sequences()
+        print("Scaling Sequences Complete")
 
         if self.group_params.train_seq_elements[0].seq_x_scaled is None or self.group_params.test_seq_elements[0].seq_x_scaled is None:
             raise ValueError("Sequence elements have not been created")
@@ -391,6 +389,25 @@ class SequenceScaler:
                 feature_set_copy = deepcopy(feature_set)
                 feature_set_copy.scaler = scaler 
                 test_seq_elements[i].X_feature_sets.append(feature_set_copy)
+        
+
+                
+        # graph close, bb_high, bb_low for the last sequence to a graph to check if the scaling is correct
+        
+        # last_seq = train_seq_elements[-1]
+        # ts = last_seq.seq_x_scaled
+
+        # graph_features = cols 
+        # cols_indices = [X_feature_dict[col] for col in graph_features]
+
+        # ts = ts[:,cols_indices]
+
+        # #plot the graph
+        # import matplotlib.pyplot as plt
+        # plt.plot(ts)
+        # plt.legend(graph_features)
+        # plt.savefig('test.png')
+
 
     
         return train_seq_elements, test_seq_elements
@@ -435,7 +452,7 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
     """
     Creates sequences of length n_steps from the dataframe df for the columns in X_cols and y_cols.
     """
-    X_cols_list = list(X_cols)
+    X_cols_list = sorted(list(X_cols))
     y_cols_list = sorted(list(y_cols)) ## Jenky work around to ensure that the columns for y target +1day,+2day etc are in the correct order
     df_cols = df[X_cols_list + y_cols_list]
 
@@ -474,9 +491,7 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
 
         sequence_element = SequenceElement(seq_x, seq_y, X_feature_dict, y_feature_dict, isTrain, start_date, end_date, ticker)
 
-        # print(seq_y)
         if np.isnan(seq_y[-1]):
-            print("nan")
             future_seq_elements.append(sequence_element)
         else:
             sequence_elements.append(sequence_element)
@@ -484,25 +499,6 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
     start_date = dates[-n_steps]
     end_date = dates[-1]
 
-
-
-    # for i in range(len(sequence)):
-    #     end_idx = i + n_steps
-    #     if end_idx > len(sequence):
-    #         break
-
-    #     # Extract sequence for X
-    #     seq_x = sequence[i:end_idx, :][:, X_indices_df]
-
-    #     # Get sequence for y from the row at end_idx-1 of sequence for the columns in y_cols
-    #     seq_y = sequence[end_idx - 1, y_indices_df]
-
-    #     start_date = dates[i]
-    #     end_date = dates[end_idx - 1]
-
-    #     sequence_element = SequenceElement(seq_x, seq_y, X_feature_dict, y_feature_dict, isTrain, start_date, end_date, ticker)
-
-    #     sequence_elements.append(sequence_element)
 
         
     return sequence_elements, X_feature_dict, y_feature_dict, future_seq_elements

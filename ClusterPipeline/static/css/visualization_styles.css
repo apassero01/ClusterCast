@@ -10,6 +10,7 @@
     background-color: rgba(211, 211, 211, 0.5); /* Light grey with transparency */
     transition: background-color 0.3s; 
     padding: 10px; 
+    position: relative;
 }
 
 .graph-text-pair-container:hover {
@@ -22,6 +23,8 @@
     height: auto; /* Maintain aspect ratio of the graph */
     position: relative; /* Set the position context for the plot */
     min-width: 0; /* If you're having issues with overflow, start with 0 */
+    justify-content: center;
+    align-items: center;
 }
 
 .text-data-container {
@@ -30,7 +33,52 @@
     min-width: 0; /* If you're having issues with overflow, start with 0 */
     /* Adjust padding or margin as needed */
     margin-left: 20px;
+    height: 100%;
+    flex-grow: 1;
+    
 }
+
+.model-summary-container {
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    padding: 10px;
+    margin-top: 10px; /* Adjust as needed */
+    overflow-x: auto; /* Allows horizontal scrolling */
+    overflow-y: auto;
+    white-space: nowrap; /* Keep all text in a single line */
+}
+
+.model-summary {
+    font-size: 0.8rem; /* Smaller font size */
+    line-height: 1;
+    color: #555; /* Slightly lighter text color */
+    display: inline-block; /* Fit content width */
+    max-width: 100%; /* Avoid overflow */
+    margin: 0;
+    padding: 0;
+}
+
+.model-features-container {
+    position: absolute; /* Position at the bottom */
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #f9f9f9; /* Light grey background */
+    padding: 10px;
+    text-align: center; /* Center-align the text */
+}
+
+.model-features {
+    font-size: 0.8em;
+    color: #333;
+    margin: 0;
+    white-space: nowrap;
+    overflow: scroll;
+}
+
+
+
 
 .text-data-container h3 {
     font-weight: bold;

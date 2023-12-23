@@ -12,16 +12,35 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <style>
+        .form-container {
+            display: flex; /* Establish a flex container */
+            flex-direction: row; /* Arrange children in a row */
+            flex-wrap: wrap; /* Allow wrapping as needed */
+            justify-content: flex-start; /* Add space between the children */
+            width: 69%; /* Full width */
+        }
+        
         .input-box {
-            width: 25%; /* One third of the container width */
+            flex: 1; /* Grow to fill available space */
             background-color: #aaaaaa; /* Black background */
+            flex-wrap: wrap;
             color: white; /* White text color */
             padding: 10px;
             box-sizing: border-box;
             overflow-y: auto; /* Add scroll for overflow */
             margin: 10px;
-            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.1),
-                        inset 0 -4px 8px rgba(0, 0, 0, 0.1);
+            max-width: calc(50% - 20px); /* Adjust max width to account for margin */
+        }
+
+        #dataset {
+            max-width: calc(50% - 10px); /* Adjust max width to account for margin */
+        }
+        #model {
+            flex: 1;
+            max-width: calc(50% - 10px); /* Adjust max width to account for margin */
+            display: flex; /* Enables Flexbox */
+            flex-direction: column; /* Arrange children in a column */
+            align-items: center; /* Align items vertically in the center */
         }
 
         .button, input, select {
@@ -34,13 +53,16 @@
             display: flex; /* Use flexbox layout */
             align-items: center; /* Align items vertically in the center */
             margin-bottom: 0px; /* Add some space between each form group */
-            justify-content: flex-start;
+            justify-content: flex-start; /* Align items to start of the container */
+            height: fit-content;
         }
+
         .option-container label {
-            flex-shrink: 0; /* Prevent the label from shrinking */
+            flex: 0 0 auto; /* Do not allow the label to grow or shrink */
             margin-right: 10px; /* Space between label and input */
             white-space: nowrap; /* Prevent labels from wrapping */
         }
+
         .option-container input[type="text"], 
         .option-container input[type="date"], 
         .option-container input[type="number"] 
@@ -62,139 +84,214 @@
             display: block; /* Take up the full container width */
             margin: 20px 0 0; /* Only margin-top */
             cursor: pointer;
+            height: 50px;
         }
         label {
             display: block; /* Ensure labels take up their own line */
         }
+        .layer-form {
+            display: flex;
+            flex-wrap:nowrap;
+            gap: 10px; /* This adds space between your items */
+            margin-bottom: 10px; /* This adds space between rows of forms */
+        }
+
+        .layer-form .neurons-input {
+            max-width: 125px;
+        }
+
+        .layer-form label,
+        .layer-form input,
+        .layer-form select {
+            margin-right: 10px;
+        }
+
+        .layer-form label {
+            margin-bottom: 5px;
+        }
+
+        /* Base styles for the models display area */
+        #modelsDisplayArea {
+            /* Hide the border initially by setting it to transparent */
+            border: 1px solid transparent;
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 20px auto;
+            transition: all 0.3s ease-in-out; /* Smooth transition for when content is added */
+        }
+        /* When there's content, show the border */
+        #modelsDisplayArea:not(:empty) {
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-color: #e1e4e8;
+        }
+
+        /* Title styles */
+        #modelsDisplayTitle {
+            /* Styles for the title when it's displayed */
+            display: block; /* Show the title when there are models */
+            font-size: 1.5rem;
+            color: #333;
+            font-weight: bold;
+            padding-bottom: 10px; /* Space between the title and the content */
+        }
+
+        /* Style for each model info */
+        .model-info {
+            background-color: #ffffff; /* White background for each model */
+            padding: 15px;
+            margin-bottom: 10px; /* Space between each model */
+            border: 1px solid #dee2e6; /* Subtle border for each model */
+            border-radius: 4px; /* Slightly rounded corners for each model */
+            position: relative; /* For absolute positioning of the delete button */
+        }
+
+        /* Headings inside model info */
+        .model-info h3 {
+            color: #333;
+            margin: 0 0 10px 0; /* Margin at the bottom */
+        }
+
+        /* Paragraphs (layer info) inside model info */
+        .model-info p {
+            color: #555;
+            margin: 5px 0; /* Vertical spacing */
+            font-size: 0.9rem; /* Smaller font size */
+        }
+
+        /* Delete button styles */
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background-color: #dc3545; /* Bootstrap 'danger' color */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Hover effect for delete button */
+        .delete-btn:hover {
+            background-color: #c82333; /* Slightly darker on hover */
+        }
+        .select2-container--default .select2-selection--single,
+        .select2-container--default .select2-selection--multiple {
+            width: 100%;
+            flex-grow: 1;
+        }
+
+        @media screen and (max-width: 600px) {
+        .cluster_features, .training_features{
+            width: 100%!important;
+        }
+}
+
+
     </style>
 {% endblock extrahead %}
 
 {% block content %}
 
-<div class="input-box">
-    <!-- Text Input -->
-    <div class="option-container">
-        <label for="Number">Tickers:</label>
-        <input type="text" id="tickers" name="tickers">
+<form id = "runForm" class ="form-container">
+    <div class="input-box" id="dataset">
+        <!-- Text Input -->
+        <div class="option-container">
+            <label for="Number">Tickers:</label>
+            <input type="text" id="tickers" name="tickers">
+        </div>
+
+        <!-- Date Inputs -->
+        <div class="option-container">
+            <label for="start_date">Start:</label>
+            <input type="date" id="start_date" name="start_date">
+        </div>
+        <div class="option-container">
+            <label for="end_date">End:</label>
+            <input type="date" id="end_date" name="end_date">
+        </div>
+
+        <!-- Number Input -->
+        <div class="option-container">
+            <label for="steps">Steps:</label>
+            <input type="number" id="steps" name="steps">
+        </div>
+
+        <!-- Checkboxes -->
+        <div class="option-container">
+            <label for="interval">Interval:</label>
+            <input type="text" id="interval" name="interval" value="1d">
+        </div>
+        <div class="option-container">
+            <label for="cluster_features">Cluster:</label>
+            <select id="cluster_features" name="cluster_features" multiple size="5">
+                {% for feature in cluster_features_list %}
+                    <option value="{{ feature }}">{{ feature }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="option-container">
+            <label for="training_features">Training:</label>
+            <select id="training_features" name="training_features" multiple size="5">
+                <option value="PctChgVars">PctChgVars</option>
+                <option value="CumulativeVars">CumulativeVars</option>
+                <option value="RollingVars">rolling_vars</option>
+                <option value="PriceVars">PriceVars</option>
+                <option value="TrendVars">TrendVars</option>
+
+                <!-- More options can be added here -->
+            </select>
+        </div>
+
+        <!-- Add number input box for feature sample size and number of feature samples -->
+        <div class="option-container">
+            <label for="feature_sample_size">Feature Sample Size:</label>
+            <input type="number" id="feature_sample_size" name="feature_sample_size" value="20">
+        </div>  
+
+        <div class="option-container">
+            <label for="feature_sample_num">Feature Sample Number:</label>
+            <input type="number" id="feature_sample_num" name="feature_sample_num" value="10">
+        </div>  
+
     </div>
 
-    <!-- Date Inputs -->
-    <div class="option-container">
-        <label for="start_date">Start:</label>
-        <input type="date" id="start_date" name="start_date">
-    </div>
-    <div class="option-container">
-        <label for="end_date">End:</label>
-        <input type="date" id="end_date" name="end_date">
-    </div>
+    <div class="input-box" id="model">
+        <!-- Model Type Selection -->
+        <div class="option-container">
+            <label for="modelType">Model Type:</label>
+            <select id="modelType" name="modelType">
+                <option value="AE">AE</option>
+                <!-- Additional model types here -->
+            </select>
+        </div>
 
-    <!-- Number Input -->
-    <div class="option-container">
-        <label for="steps">Steps:</label>
-        <input type="number" id="steps" name="steps">
-    </div>
+        <!-- Encoder Layers Selection (only show if AE is selected) -->
+        <div class="option-container" id="encoderLayersContainer">
+            <label for="encoderLayers">AE Layers:</label>
+            <input type="number" id="encoderLayers" name="encoderLayers" value="2">
+        </div>
 
-    <!-- Checkboxes -->
-    <div class="option-container">
-        <label for="interval">Interval:</label>
-        <input type="text" id="interval" name="interval">
-    </div>
-    <div class="option-container">
-        <label for="cluster_features">Cluster Features:</label>
-        <select id="cluster_features" name="cluster_features" multiple size="5">
-            {% for feature in cluster_features_list %}
-                <option value="{{ feature }}">{{ feature }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="option-container">
-        <label for="training_features">Training Features:</label>
-        <select id="training_features" name="training_features" multiple size="5">
-            <option value="PctChgVars">PctChgVars</option>
-            <option value="CumulativeVars">CumulativeVars</option>
-            <option value="RollingVars">rolling_vars</option>
-            <option value="PriceVars">PriceVars</option>
-            <option value="TrendVars">TrendVars</option>
+        <!-- Layers Configuration Container -->
+        <div id="layersContainer">
+            <!-- Layer forms will be added here dynamically by JavaScript -->
+        </div>
 
-            <!-- More options can be added here -->
-        </select>
+        <!-- Button to Add New Layer -->
+        <button type="button" id="addModel">Add Model to Config</button>
     </div>
-    <!-- 
-    <div class="option-container">
-        <label for="target_features">Target Features:</label>
-        <input type="text" id="target_features" name="target_features">
-    </div>
-    -->
+<!-- Submit Button -->
+    <button class="button" type="submit">Create Cluster Run</button>
 
-    <!-- Submit Button -->
-    <button class="button" onclick="sendPostRequest()">Create Cluster Run</button>
+</form>
+<div id = "model">
+    <h2 id="modelsDisplayTitle" style="text-align: center; margin-top: 20px;">Model Architectures</h2>
+    <div id="modelsDisplayArea">
+        <!-- Models will be displayed here -->
+    </div>"
 </div>
 
-<div class="data-visualization">
-    <!-- Include the cluster visualization template -->
-    {% include 'ClusterPipeline/cluster_visualization.html' %}
-</div>
-
-
-<!-- Additional scripts for this page -->
-<script>
-    let csrfToken = document.getElementById('csrfToken').value;
-
-    function sendPostRequest() {
-        // clear the data visualization container
-        let dataVisContainer = document.querySelector('.data-visualization');
-        dataVisContainer.innerHTML = '';
-        showLoader();
-        // Initialize an object to store the form values
-        let formData = {};
-    
-        // Collect value from the text input
-        formData['tickers'] = document.getElementById('tickers').value;
-    
-        // Collect values from the date inputs
-        formData['start_date'] = document.getElementById('start_date').value;
-        formData['end_date'] = document.getElementById('end_date').value;
-    
-        // Collect value from the number input
-        formData['steps'] = document.getElementById('steps').value;
-    
-        // Collect values from the checkboxes
-        formData['interval'] = document.getElementById('interval').value;
-        let selectedFeatures = [];
-        let selectedOptions = document.getElementById('cluster_features').selectedOptions;
-        for (let option of selectedOptions) {
-            selectedFeatures.push(option.value);
-        }
-        formData['cluster_features'] = selectedFeatures;
-        
-        selectedFeatures = [];
-        selectedOptions = document.getElementById('training_features').selectedOptions;
-        for (let option of selectedOptions) {
-            selectedFeatures.push(option.value);
-        }
-        formData['training_features'] = selectedFeatures;
-        
-        //formData['target_features'] = document.getElementById('target_features').value;
-    
-        // Send a POST request with the collected data
-        fetch('', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-            // Include additional headers as required by your endpoint
-        },
-        body: JSON.stringify(formData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Call the renderVisualization function with the response data
-            renderVisualization(data);
-        })
-        .catch(error => console.error('Error:', error))
-        .finally(() => hideLoader());
-    }
-</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
 <script>
     $(document).ready(function() {
@@ -205,5 +302,466 @@
     $(document).ready(function() {
         $('#training_features').select2();
     });
+</script>
+<script>
+function initializeModelForm() {
+    // const layersContainer = document.getElementById('layersContainer');
+
+    // // Add default layers
+    // for (let i = 0; i < 4; i++) {
+    //     const layersContainer = document.getElementById('layersContainer');
+    //     const layerForm = createLayerForm(); // Uses default values
+    //     layersContainer.appendChild(layerForm);
+    // }
+
+    const config_1 = {
+        model_type: 'AE',
+        num_encoder_layers: 2,
+        layers: [
+            {
+                type: 'LSTM',
+                units: 100,
+                activation: 'tanh'
+            },
+            {
+                type: 'Dropout',
+                rate: 0.2
+            },
+            {
+                type: 'LSTM',
+                units: 50,
+                activation: 'tanh'
+            },
+            {
+                type: 'LSTM',
+                units: 50,
+                activation: 'tanh'
+            },
+            {
+                type: 'LSTM',
+                units: 25,
+                activation: 'tanh'
+            },
+
+        ]
+    };
+
+    config_2 = {
+        model_type: 'AE',
+        num_encoder_layers: 3,
+        layers: [
+            {
+                type: 'GRU',
+                units: 100,
+                activation: 'tanh'
+            },
+            {
+                type: 'Dropout',
+                rate: 0.2
+            },
+            {
+                type: 'GRU',
+                units: 50,
+                activation: 'tanh'
+            },
+            {
+                type: 'GRU',
+                units: 50,
+                activation: 'tanh'
+            },
+            {
+                type: 'GRU',
+                units: 50,
+                activation: 'tanh'
+            },
+            {
+                type: 'GRU',
+                units: 25,
+                activation: 'tanh'
+            },
+        ]
+    };
+
+    displayModelConfigs
+    handleAddingModel(config_1);
+    handleAddingModel(config_2);
+    populateModelInput(config_1);
+    displayModelConfigs();
+    
+
+    // Add event listener to addModel button'
+    const addModelBtn = document.getElementById('addModel');
+    addModelBtn.addEventListener('click', function() {
+        const modelData = gatherModelData();
+        handleAddingModel(modelData);
+        displayModelConfigs();
+    });
+}
+
+
+
+function createLayerForm(layerType = 'LSTM', neurons = '50', activation = 'tanh', dropout = '0.2') {
+    const layerForm = document.createElement('div');
+    layerForm.classList.add('layer-form', 'option-container');
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'X';
+    closeBtn.classList.add('close-button');
+    closeBtn.setAttribute('type', 'button');
+
+    // Style the Close Button (optional)
+    closeBtn.style.position = 'relative';
+    closeBtn.style.border = 'none';
+    closeBtn.style.background = 'none';
+    closeBtn.style.cursor = 'pointer';
+
+    // Event Listener for Close Button
+    closeBtn.addEventListener('click', function() {
+        layerForm.remove();
+    });
+
+    layerForm.appendChild(closeBtn);
+
+    // Layer type input
+
+    const layerTypeContainer = createLayerTypeSelect(layerType);
+    layerForm.appendChild(layerTypeContainer);
+
+    // Neurons input container 
+    const neuronsContainer = createUnitsInput(neurons);
+    layerForm.appendChild(neuronsContainer);
+
+    // Activation input container 
+    const activationContainer = createActivationInput(activation);
+    layerForm.appendChild(activationContainer);
+
+    // Dropout input Container 
+    const dropoutContainer = createDropoutInput(dropout);
+    layerForm.appendChild(dropoutContainer);
+
+    // Event listener to change inputs based on layer type selection
+    const layerTypeInput = layerTypeContainer.querySelector('select');
+
+    layerTypeInput.addEventListener('change', (event) => {
+        const selectedType = event.target.value;
+        if (selectedType === 'Dropout') {
+            neuronsContainer.style.display = 'none';
+            neuronsContainer.disabled = true;
+            activationContainer.style.display = 'none';
+            activationContainer.disabled = true;
+            dropoutContainer.style.display = 'flex';
+            dropoutContainer.disabled = false;
+        } else {
+            neuronsContainer.style.display = 'flex';
+            neuronsContainer.disabled = false;
+            activationContainer.style.display = 'flex';
+            activationContainer.disabled = false;
+            dropoutContainer.style.display = 'none';
+            dropoutContainer.disabled = true;
+        }
+    });
+
+
+    layerTypeInput.dispatchEvent(new Event('change'));
+
+    const addInplaceBtn = document.createElement('button');
+    addInplaceBtn.textContent = '+';
+    addInplaceBtn.classList.add('addInplaceBtn');
+    addInplaceBtn.setAttribute('type', 'button');
+
+    // Style the Close Button (optional)
+    addInplaceBtn.style.position = 'relative';
+    addInplaceBtn.style.border = 'none';
+    addInplaceBtn.style.background = 'none';
+    addInplaceBtn.style.cursor = 'pointer';
+
+    // Event Listener for Close Button
+    addInplaceBtn.addEventListener('click', function() {
+        const newlayerForm = createLayerForm(); // Uses default values
+        const parentContainer = layerForm.parentNode;
+        parentContainer.insertBefore(newlayerForm, layerForm.nextSibling);
+    });
+
+    layerForm.appendChild(addInplaceBtn);
+
+
+    return layerForm; 
+}
+
+function createLayerTypeSelect(layerType){
+
+    const layerTypeContainer = document.createElement('div');
+    layerTypeContainer.classList.add('option-container', 'layer-type-input');
+
+
+    const layerTypeLabel = document.createElement('label');
+    layerTypeLabel.textContent = 'Type:';
+    layerTypeContainer.appendChild(layerTypeLabel);
+
+    const layerTypeInput = document.createElement('select');
+    // Add options to layerTypeInput...
+    layerTypeInput.value = layerType;
+    layerTypeContainer.appendChild(layerTypeInput);
+
+    const lstmOption = document.createElement('option');
+    lstmOption.value = 'LSTM';
+    lstmOption.textContent = 'LSTM';
+    layerTypeInput.appendChild(lstmOption);
+
+    const gruOption = document.createElement('option');
+    gruOption.value = 'GRU';
+    gruOption.textContent = 'GRU';
+    layerTypeInput.appendChild(gruOption);
+
+    const dropoutOption = document.createElement('option');
+    dropoutOption.value = 'Dropout';
+    dropoutOption.textContent = 'Dropout';
+    layerTypeInput.appendChild(dropoutOption);
+
+    layerTypeInput.value = layerType;
+
+    return layerTypeContainer;
+}
+
+function createUnitsInput(neurons){
+
+    const neuronsContainer = document.createElement('div');
+    neuronsContainer.classList.add('option-container', 'neurons-input');
+    const neuronsLabel = document.createElement('label');
+    neuronsLabel.textContent = 'Units:';
+    neuronsContainer.appendChild(neuronsLabel);
+
+    const neuronsInput = document.createElement('input');
+    neuronsInput.type = 'number';
+    neuronsInput.value = neurons;
+    neuronsInput.name = 'units';
+    neuronsInput.classList.add('neurons-input');
+    neuronsContainer.appendChild(neuronsInput);
+
+    return neuronsContainer;
+}
+
+function createActivationInput(activation){
+    const activationContainer = document.createElement('div');
+    activationContainer.classList.add('option-container', 'activation-input');
+    const activationLabel = document.createElement('label');
+    activationLabel.textContent = 'Act:';
+    activationContainer.appendChild(activationLabel);
+    const activationInput = document.createElement('select');
+    // Add options to activationInput...
+    activationInput.value = activation;
+
+
+    const tanhOption = document.createElement('option');
+    tanhOption.value = 'tanh';
+    tanhOption.textContent = 'tanh';
+    activationInput.appendChild(tanhOption);
+
+    const reluOption = document.createElement('option');
+    reluOption.value = 'relu';
+    reluOption.textContent = 'relu';
+    activationInput.appendChild(reluOption);
+
+    activationInput.value = activation;
+    activationContainer.appendChild(activationInput);
+
+    return activationContainer;
+}
+
+function createDropoutInput(dropout){
+    const dropoutContainer = document.createElement('div');
+    dropoutContainer.classList.add('option-container', 'dropout-input');
+
+    const dropoutLabel = document.createElement('label');
+    dropoutLabel.textContent = 'Rate:';
+    dropoutContainer.appendChild(dropoutLabel);
+
+    const dropoutInput = document.createElement('input');
+    dropoutInput.type = 'number';
+    dropoutInput.value = dropout;
+    dropoutInput.required = false;
+    dropoutInput.disabled = true;
+    dropoutInput.name = 'rate';
+    dropoutInput.classList.add('neurons-input');
+    dropoutContainer.appendChild(dropoutInput);
+    dropoutContainer.style.display = 'none';
+
+    return dropoutContainer;
+}
+
+// Call the function to initialize the form when the script loads
+document.addEventListener('DOMContentLoaded', initializeModelForm);
+
+
+function gatherModelData() {
+    const modelData = {
+        model_type: document.getElementById('modelType').value,
+        num_encoder_layers: parseInt(document.getElementById('encoderLayers').value, 10),
+        layers: []
+    };
+
+    // Assuming each layer's form has a class 'layer-form'
+    const layerForms = document.querySelectorAll('.layer-form');
+    layerForms.forEach(form => {
+        const layer = {};
+
+        // Determine the type of layer
+        const layerTypeContainer = form.querySelector('.layer-type-input');
+        const layerTypeSelect = layerTypeContainer.querySelector('select');
+
+        const layerType = layerTypeSelect.value;
+        console.log(layerType);
+        layer.type = layerType;
+
+        // Depending on the type, gather the relevant information
+        if (layerType === 'LSTM' || layerType === 'GRU') {
+            unitsContainer = form.querySelector('.neurons-input');
+            layer.units = parseInt(unitsContainer.querySelector('input').value, 10);
+            
+            activationContainer = form.querySelector('.activation-input');
+            layer.activation = activationContainer.querySelector('select').value;
+
+        } else if (layerType === 'Dropout') {
+            dropoutContainer = form.querySelector('.dropout-input');
+            layer.rate = parseFloat(dropoutContainer.querySelector('input').value);
+        }
+        // Add the layer object to the modelData.layers array
+        modelData.layers.push(layer);
+    });
+
+    return modelData;
+}
+
+function populateModelInput(modelConfig){
+    document.getElementById('layersContainer').innerHTML = '';
+    document.getElementById('modelType').value = modelConfig.model_type;
+    document.getElementById('encoderLayers').value = modelConfig.num_encoder_layers;
+    modelConfig.layers.forEach((layer, index) => {
+        const layerForm = createLayerForm(layer.type, layer.units, layer.activation, layer.rate);
+        const layersContainer = document.getElementById('layersContainer');
+        layersContainer.appendChild(layerForm);
+    });
+}
+
+function gatherDatasetData() {
+    const datasetData = {
+        tickers: document.getElementById('tickers').value,
+        start_date: document.getElementById('start_date').value,
+        end_date: document.getElementById('end_date').value,
+        steps: parseInt(document.getElementById('steps').value, 10),
+        interval: document.getElementById('interval').value,
+        feature_sample_size: parseInt(document.getElementById('feature_sample_size').value, 10),
+        feature_sample_num: parseInt(document.getElementById('feature_sample_num').value, 10),
+        cluster_features: [],
+        training_features: [],
+    };
+
+    const clusterFeaturesSelect = document.getElementById('cluster_features');
+    for (let option of clusterFeaturesSelect.selectedOptions) {
+        datasetData.cluster_features.push(option.value);
+    }
+
+    const trainingFeaturesSelect = document.getElementById('training_features');
+    for (let option of trainingFeaturesSelect.selectedOptions) {
+        datasetData.training_features.push(option.value);
+    }
+
+    return datasetData;
+}
+
+let modelConfigs = [];
+function handleAddingModel(modelData){
+    modelConfigs.push(modelData);
+    console.log(modelConfigs);
+}
+
+function displayModelConfigs(){
+    const displayArea = document.getElementById('modelsDisplayArea');
+    displayArea.innerHTML = '';
+
+    modelConfigs.forEach((modelConfig,index) => {
+        let modelHtml = `<h3>Model ${index + 1}:</h3>`;
+        modelHtml += `<p>model_type: ${modelConfig.model_type}, Encoder Layers: ${modelConfig.num_encoder_layers}</p>`;
+
+        modelConfig.layers.forEach((layer, layerIndex) => {
+            if (layer.type === 'Dropout') {
+                modelHtml += `<p>Layer ${layerIndex + 1}: Type: ${layer.type}, Rate: ${layer.rate}</p>`;
+            } else {
+
+                modelHtml += `<p>Layer ${layerIndex + 1}: Type: ${layer.type}, Units: ${layer.units}, Activation: ${layer.activation}</p>`;
+            }
+        });
+
+        let modelDiv = document.createElement('div');
+        modelDiv.classList.add('model-info');
+        modelDiv.innerHTML = modelHtml;
+
+        let deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.classList.add('delete-btn');
+        deleteBtn.addEventListener('click', function() {
+            modelConfigs.splice(index, 1);
+            displayModelConfigs();
+        });
+
+        let editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit';
+        editBtn.classList.add('edit-btn');
+        editBtn.addEventListener('click', function() {
+            populateModelInput(modelConfig);
+        });
+
+        modelDiv.appendChild(editBtn);
+        modelDiv.appendChild(deleteBtn);
+        displayArea.appendChild(modelDiv);
+
+    });
+}
+
+
+
+
+document.getElementById('runForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+    const modelData = modelConfigs
+    const datasetData = gatherDatasetData();
+
+    const runData = {
+        model: modelData,
+        dataset: datasetData
+    };
+    
+    const requestOptions = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+            // Include additional headers as required by your endpoint
+        },
+        body: JSON.stringify(runData)
+    };
+    
+    fetch('', requestOptions)
+        .then(response => {
+            if (response.ok) {
+                return response.text(); // Parse the response as JSON
+            } else {
+                // Request failed
+                throw new Error('POST request failed');
+            }
+            })
+        .then(data => {
+            // Handle the response data here
+            alert(data);
+        })
+        .catch(error => {
+            // Handle errors here
+            alert(error)
+        });
+});
+
+
+
+
 </script>
 {% endblock %}
