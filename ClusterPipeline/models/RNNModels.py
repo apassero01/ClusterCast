@@ -32,6 +32,7 @@ class RNNModel(models.Model):
     cluster = models.ForeignKey('StockCluster', on_delete=models.CASCADE, related_name='RNNModels')
     model_type_str = models.CharField(max_length=1000,default = 'None')
     num_encoder_layers = models.IntegerField(default = 0)
+    model_metrics = models.JSONField(default=dict)
 
     def initialize(self,X_train, y_train, X_test, y_test, model_type = None, model_features = None, model_dir = None, num_autoencoder_layers= None, num_encoder_layers = None):
         self.layers = [] 
@@ -150,11 +151,11 @@ class RNNModel(models.Model):
             new_model.add(TimeDistributed(Dense(1), name='time_distributed_output'))
 
         
-        new_model.compile(loss='mae', optimizer=Adam(learning_rate=0.001))
+        new_model.compile(loss='mse', optimizer=Adam(learning_rate=0.001))
         self.model = new_model
     
     def fit(self,epochs=100,batch_size=32):
-                # After building the model
+        # After building the model
 
         summary_string_list = []
         self.model.summary(print_fn=lambda x: summary_string_list.append(x))
@@ -167,9 +168,11 @@ class RNNModel(models.Model):
         print("Validation data shape:", self.X_test.shape, self.y_test.shape)
 
         # Optionally, implement a custom training loop for further debugging
+
+        patience = 15
         early_stopping = EarlyStopping(
             monitor='val_loss',  # Metric to monitor (e.g., validation loss)
-            patience=15,          # Number of epochs with no improvement before stopping
+            patience=patience,          # Number of epochs with no improvement before stopping
             restore_best_weights=True  # Restore model weights to the best epoch
         )
 
@@ -184,6 +187,16 @@ class RNNModel(models.Model):
         # Train the model with early stopping
 
         self.model.fit(self.X_train,self.y_train,epochs=epochs,batch_size=batch_size,validation_data=(self.X_test,self.y_test),callbacks=callbacks)
+
+        stopped_epoch = early_stopping.stopped_epoch
+        effective_epochs = stopped_epoch - patience + 1
+
+        error = self.model.evaluate(self.X_test, self.y_test, verbose=0)
+
+        self.model_metrics = {
+            "effective_epochs": effective_epochs,
+            "error": round(error,2), 
+        }
     
     def predict(self,X):
         return self.model.predict(X)
@@ -289,7 +302,8 @@ class RNNModel(models.Model):
                 fig.add_trace(go.Box(y=step_result.predicted_values, name=f'Predicted {i}')) 
                 fig.add_trace(go.Box(y=step_result.actual_values, name=f'Real {i}'))
             else:
-                fig.add_trace(go.Box(y=self.y_train[:,i], name=f'Predicted {i}'))
+                fig.add_trace(go.Box(y=self.y_train[:,i-1], name=f'TrainSet {i}'))
+                fig.add_trace(go.Box(y=self.y_test[:,i-1], name=f'TestSet {i}'))
 
         fig.update_layout(
             title='Future Performance of Cluster',

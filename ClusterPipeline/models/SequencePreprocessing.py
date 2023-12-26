@@ -11,7 +11,11 @@ from django.db import models
 import json
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-class SequenceElement():         
+class SequenceElement(): 
+    """
+    Class to encapsulate a a 2d sequence of length n_steps for the X and y features
+    The 3D data structure models are trained on consist of a list of SequenceElements
+    """        
     def __init__(self,seq_x,seq_y, x_feature_dict, y_feature_dict,isTrain, start_date = None, end_date = None, ticker = None):
         self.seq_x = seq_x
         self.seq_y = seq_y
@@ -389,24 +393,6 @@ class SequenceScaler:
                 feature_set_copy = deepcopy(feature_set)
                 feature_set_copy.scaler = scaler 
                 test_seq_elements[i].X_feature_sets.append(feature_set_copy)
-        
-
-                
-        # graph close, bb_high, bb_low for the last sequence to a graph to check if the scaling is correct
-        
-        # last_seq = train_seq_elements[-1]
-        # ts = last_seq.seq_x_scaled
-
-        # graph_features = cols 
-        # cols_indices = [X_feature_dict[col] for col in graph_features]
-
-        # ts = ts[:,cols_indices]
-
-        # #plot the graph
-        # import matplotlib.pyplot as plt
-        # plt.plot(ts)
-        # plt.legend(graph_features)
-        # plt.savefig('test.png')
 
 
     

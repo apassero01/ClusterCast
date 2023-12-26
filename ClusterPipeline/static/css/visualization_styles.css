@@ -38,6 +38,12 @@
     
 }
 
+.graph-stats-container
+{
+    display: flex;
+    flex-direction: column;
+}
+
 .model-summary-container {
     background: #fff;
     border-radius: 6px;

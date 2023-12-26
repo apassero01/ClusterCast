@@ -174,11 +174,14 @@ class StockDataSet(DataSet):
         X_cols = set() 
 
         # Create price features
-        self.df, feature_sets = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'])
+        self.df, feature_sets = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'], cluster_features = self.group_params.cluster_features)
 
         self.X_feature_sets += feature_sets
-        X_cols.update(feature_sets[0].cols + feature_sets[1].cols)
+        for feature_set in feature_sets:
+            X_cols.update(feature_set.cols)
         #todo clean this up
+        if 'bb_close' in X_cols:
+            print("bb_close in X_cols")
 
         # Create trend features
         self.df, feature_set = create_trend_vars(self.df,scaling_method=self.scaling_dict['trend_vars'])
@@ -199,7 +202,6 @@ class StockDataSet(DataSet):
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
         
-        # print(df.tail())
 
         # Update the group params with the new  columns
         self.group_params.X_feature_sets = self.X_feature_sets
@@ -324,23 +326,22 @@ def get_stock_data(
 
     return df, df.columns.tolist()
 
-def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100], scaling_method = ScalingMethod.SBSG) -> (pd.DataFrame, FeatureSet):
+def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100], scaling_method = ScalingMethod.SBSG, cluster_features = None) -> (pd.DataFrame, FeatureSet):
     """
     Create price features from the OHLC data.
     """
     feature_sets = [] 
-    feature_set = FeatureSet(scaling_method, 'price_vars',(0,1))
+    price_feature_set = FeatureSet(scaling_method, 'price_vars',(0,1))
 
-    feature_set.cols +=["open", "high", "low"] # add close
+    price_feature_set.cols +=["open", "high", "low","close"] # add close
 
     # Create price features
     for length in moving_average_vals:
         df["sma" + str(length)] = ta.sma(df.close, length=length)
         df["ema" + str(length)] = ta.ema(df.close, length=length)
-        feature_set.cols.append("sma" + str(length))
-        feature_set.cols.append("ema" + str(length))
-        # df["sma" + str(length)].fillna(method='bfill', inplace=True)
-        # df["ema" + str(length)].fillna(method='bfill', inplace=True)
+        price_feature_set.cols.append("sma" + str(length))
+        price_feature_set.cols.append("ema" + str(length))
+
 
     # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
     # df = pd.concat([df, lag_df], axis=1)
@@ -348,22 +349,33 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
         
     bollinger_obj = technical_analysis.volatility.BollingerBands(df.close, window=20, window_dev=2)
 
-    # df['bb_high_indicator'] = bollinger_obj.bollinger_hband_indicator()
-    # df['bb_low_indicator'] = bollinger_obj.bollinger_lband_indicator()
-
     df['bb_high'] = bollinger_obj.bollinger_hband()
     df['bb_low'] = bollinger_obj.bollinger_lband()
     df['bb_ma'] = bollinger_obj.bollinger_mavg()
 
-    bb_feauture_set = FeatureSet(scaling_method, 'bb_vars', (0,1))
+    price_feature_set.cols += ['bb_high', 'bb_low', 'bb_ma']
 
+    # bb_feauture_set = FeatureSet(scaling_method, 'bb_vars', (0,1))
 
-    bb_feauture_set.cols += ['bb_high','bb_low','close']
-    
-    for col in feature_set.cols + bb_feauture_set.cols:
+    if cluster_features:
+        # We want to scale all of the price cluster features on the same scale.
+        # If cluster_feaure[0] is a price_var, the rest will also be
+        if cluster_features[0] in price_feature_set.cols:
+            cluster_feature_set = FeatureSet(ScalingMethod.SBSG, 'cluster_vars', (0,1))
+            for feature in cluster_features:
+                cluster_feature_set.cols.append(feature)
+                price_feature_set.cols.remove(feature)
+            
+            feature_sets.append(cluster_feature_set)
+
+    all_cols = []
+    for feature_set in feature_sets:
+        all_cols += feature_set.cols
+
+    for col in all_cols:
         df[col] = df[col].fillna(method='bfill')
 
-    feature_sets += [feature_set, bb_feauture_set]
+    feature_sets.append(price_feature_set)
 
     return df, feature_sets
 
@@ -607,51 +619,6 @@ def df_train_test_split(dataset, feature_list, train_percentage = 0.8):
 
     return train, test
 
-# class MinMaxPercentileScaler(BaseEstimator, TransformerMixin):
-#     """
-#     Custom transformer that clips data to the defined percentiles and scales it between -1 and 1. This is important as zero is maintained before and after scaling. This ensures
-#     the same number of values <, = and > zero are maintained.
-#     """
-#     def __init__(self,percentile=[1,99]):
-#         self.max_abs_trimmed_ = None
-#         self.percentile = percentile
-    
-#     def fit(self, X, y=None):
-#         # Ensure we're working with a copy
-#         X_copy = X.copy() if isinstance(X, pd.DataFrame) else np.copy(X)
-        
-#         # Assuming X is a DataFrame or numpy array
-#         low, high = np.percentile(X_copy, self.percentile, axis=0)  # axis=0 computes percentiles column-wise
-#         self.max_abs_trimmed_ = np.maximum(np.abs(low), np.abs(high))
-#         return self
-
-#     def transform(self, X):
-#         # Ensure we're working with a copy
-#         X_copy = X.copy() if isinstance(X, pd.DataFrame) else np.copy(X)
-        
-#         # Clip data column-wise
-#         X_copy = np.clip(X_copy, -self.max_abs_trimmed_, self.max_abs_trimmed_)
-
-#         # Scale values between -1 and 1 for each column, maintaining zero
-#         pos_mask = X_copy > 0
-#         neg_mask = X_copy < 0
-        
-#         X_copy[pos_mask] = X_copy[pos_mask] / self.max_abs_trimmed_
-#         X_copy[neg_mask] = X_copy[neg_mask] / self.max_abs_trimmed_
-
-#         return X_copy
-    
-#     def inverse_transform(self, X):
-#         # Ensure we're working with a copy
-#         X_copy = X.copy() if isinstance(X, pd.DataFrame) else np.copy(X)
-        
-#         # If it's a DataFrame, get the numpy array
-#         if isinstance(X_copy, pd.DataFrame):
-#             X_copy = X_copy.values  # Convert to NumPy array
-
-#         X_copy = X_copy * self.max_abs_trimmed_
-
-#         return X_copy
 
 class MinMaxPercentileScaler(BaseEstimator, TransformerMixin):
     def __init__(self, percentile=[5, 95], scaling_mode='column'):

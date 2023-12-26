@@ -26,13 +26,37 @@ function renderVisualization(data) {
 
         // Iterate over each data result pair
         data.forEach((dict,index) => {
-            const {figs, metrics, model_config} = dict;
+            const {figs, metrics, model_config, model_stats} = dict;
 
             // Create the container for the graph-text pair
             let pairContainer = document.createElement('div');
             pairContainer.classList.add('graph-text-pair-container');
-            // Append the pair container to the 'data-visualization' container
-            dataVisualizationContainer.appendChild(pairContainer);
+            
+            graphStatsContainer = document.createElement('div');
+            graphStatsContainer.classList.add('graph-stats-container');
+
+            
+            
+            console.log(model_stats)
+            if (Object.keys(model_stats).length > 0) {
+                const epochs = model_stats.effective_epochs;
+                const error = model_stats.error;
+
+                // add epochs and error text to top of pair container
+                let epochsErrorContainer = document.createElement('div');
+                epochsErrorContainer.classList.add('epochs-error-container');
+                let epochsError = document.createElement('p');
+                epochsError.innerHTML = `Epochs: ${epochs} | Error: ${error}`;
+                epochsError.classList.add('epochs-error');
+                epochsErrorContainer.appendChild(epochsError);
+                
+                graphStatsContainer.appendChild(epochsErrorContainer);
+ 
+            }
+
+            graphStatsContainer.appendChild(pairContainer);
+            dataVisualizationContainer.appendChild(graphStatsContainer);
+
 
             figs.forEach(fig => {
                 // Create the container for the graph

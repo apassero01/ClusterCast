@@ -299,7 +299,7 @@ def cluster_run(request):
         target_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
 
         scaling_dict = {
-            'price_vars': SP.ScalingMethod.SBSG,
+            'price_vars': SP.ScalingMethod.UNSCALED,
             'trend_vars' : SP.ScalingMethod.SBS,
             'pctChg_vars' : SP.ScalingMethod.QUANT_MINMAX,
             'rolling_vars' : SP.ScalingMethod.QUANT_MINMAX,
@@ -373,6 +373,7 @@ def cluster_group_detail(request, id):
         cluster_dict['figs'] = (fig1_json,fig2_json)
         cluster_dict['metrics'] = metrics
         cluster_dict['model_config'] = model_config
+        cluster_dict['model_stats'] = best_model.model_metrics
 
         cluster_results.append(cluster_dict)
 
@@ -405,13 +406,18 @@ def cluster_detail(request, group_id, cluster_id):
         fig1 = model.visualize_future_distribution()
         fig1_json = json.loads(plotly.io.to_json(fig1))
 
+        fig2 = model.visualize_future_distribution(isTest=False)
+        fig2_json = json.loads(plotly.io.to_json(fig2))
+
         metrics = model.generate_results()
         model_config = model.generate_model_config()
+        
 
         model_dict = {}
-        model_dict['figs'] = [fig1_json]
+        model_dict['figs'] = [fig1_json,fig2_json]
         model_dict['metrics'] = metrics
         model_dict['model_config'] = model_config
+        model_dict['model_stats'] = model.model_metrics
 
         model_results.append(model_dict)
 
