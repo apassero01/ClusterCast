@@ -23,4 +23,6 @@ urlpatterns = [
     path("cluster-group/", views.cluster_group, name="ClusterCast-cluster-group"),
     path("cluster-group/<int:id>/", views.cluster_group_detail, name="cluster_group_detail"),
     path("cluster/<int:group_id>/<int:cluster_id>/", views.cluster_detail, name="cluster_detail"),
+    path("predict/", views.prediction, name="ClusterCast-predict"),
+    path("predict/<int:prediction_id>/", views.prediction_detail, name="prediction_detail"),
 ]

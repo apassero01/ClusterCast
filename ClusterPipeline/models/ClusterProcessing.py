@@ -21,6 +21,8 @@ from tensorflow.keras.callbacks import EarlyStopping
 import sys
 from .RNNModels import RNNModel, ModelTypes, StepResult
 from tensorflow.keras.initializers import glorot_uniform, zeros
+from django.dispatch import receiver
+import shutil
 
 
 class SupportedParams(models.Model):
@@ -104,7 +106,7 @@ class ClusterGroupParams(models.Model):
     end_date = models.DateField()
     n_steps = models.IntegerField()
     scaling_dict = models.JSONField(default=dict)
-    name = models.CharField(max_length=100,default="")
+    name = models.CharField(max_length=400,default="")
     X_feature_dict = models.JSONField(default=dict)
     y_feature_dict = models.JSONField(default=dict)
 
@@ -131,8 +133,8 @@ class StockClusterGroupParams(ClusterGroupParams):
     tickers = models.JSONField(default=list)
     target_cols = models.JSONField(default=list)
     interval = models.CharField(max_length=10)
-    cluster_features = models.JSONField(default=list)
-    training_features = models.JSONField(default=list)
+    cluster_features = models.JSONField(default=list,blank=True)
+    training_features = models.JSONField(default=list,blank=True)
 
     def initialize(self):
         super().initialize()
@@ -336,13 +338,15 @@ class StockClusterGroup(ClusterGroup):
 
             iqr = np.percentile(cluster_distances, 75) - np.percentile(cluster_distances, 25)
 
+            centroid = self.cluster_centers[label].tolist()
+
             metrics = {"std_dev": std_dev, "iqr": iqr}
 
             if len(cur_train_seq_elements) == 0 or len(cur_test_seq_elements) == 0:
                 continue
 
             # Create the object and pass in the label, cluster_group and associated metrics 
-            cluster = StockCluster.objects.create(label=label, cluster_group=self, cluster_metrics=metrics)
+            cluster = StockCluster.objects.create(label=label, cluster_group=self, cluster_metrics=metrics, centroid=centroid)
             cluster.initialize(cur_train_seq_elements,cur_test_seq_elements)
             self.clusters.append(cluster)
 
@@ -372,7 +376,7 @@ class StockClusterGroup(ClusterGroup):
             self.filtered_clusters.append(cluster)
             cluster.save()
             # Maybe delete the models later
-            cluster.model = None
+            cluster.hard_filter_models()
 
         self.group_params.save() 
 
@@ -470,6 +474,7 @@ class Cluster(models.Model):
     '''
     label = models.IntegerField(default=-1)
     cluster_metrics = models.JSONField(default=dict)
+    centroid = models.JSONField(default=list)
     class Meta:
         abstract = True
     
@@ -642,6 +647,26 @@ class StockCluster(Cluster):
                 self.best_model_idx = i
         
         return self.best_model_idx
+    
+    def hard_filter_models(self,accuracy_threshold = 60, epoch_threshold = 7):
+        '''
+        Method to filter the models based on a dictionary of filters
+        '''
+
+        for model in self.models:
+            accuracy = model.model_metrics['avg_accuracy']
+            epochs = model.model_metrics['effective_epochs']
+
+            if accuracy < accuracy_threshold or epochs < epoch_threshold:
+                model.delete()
+    
+    def sort_models(self):
+        '''
+        Method to sort the models by accuracy
+        '''
+        self.sorted_models = sorted(self.models, key=lambda x: x.compute_average_accuracy   (), reverse=True)
+
+        return self.sorted_models
 
     
     def random_sample_features(self, num_features, features, strong_predictors, strong_ratio = .5):
@@ -658,6 +683,19 @@ class StockCluster(Cluster):
         return list(strong_predictors) + list(other_predictors)
 
 
+@receiver(models.signals.post_delete, sender=StockClusterGroupParams)
+def auto_delete_file_on_delete(sender, instance, **kwargs):
+    """
+    Deletes file from filesystem
+    when corresponding `StockClusterGroupParams` object is deleted.
+    """
+    directory =  f"SavedModels/{instance.name}/"
+    if os.path.exists(directory):
+        try:
+            shutil.rmtree(directory)
+            print(f"Directory '{directory}' and all its contents have been removed.")
+        except OSError as error:
+            print(f"Error: {error}")
 
 def clone_for_tuning(base_model, freeze_up_to_layer_name, learning_rate=0.001):
     new_model = clone_model(base_model)
@@ -738,4 +776,4 @@ def create_attention(input_shape, output_steps, num_features):
 
     return model
 
-        
+    

@@ -12,6 +12,9 @@ import numpy as np
 import plotly.graph_objects as go
 import tensorflow as tf
 import json
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+import shutil
 
 import io
 
@@ -155,7 +158,7 @@ class RNNModel(models.Model):
         self.model = new_model
     
     def fit(self,epochs=100,batch_size=32):
-        # After building the model
+         # After building the model
 
         summary_string_list = []
         self.model.summary(print_fn=lambda x: summary_string_list.append(x))
@@ -193,9 +196,12 @@ class RNNModel(models.Model):
 
         error = self.model.evaluate(self.X_test, self.y_test, verbose=0)
 
+        average_accuracy = self.compute_average_accuracy()
+
         self.model_metrics = {
             "effective_epochs": effective_epochs,
             "error": round(error,2), 
+            "avg_accuracy": average_accuracy,
         }
     
     def predict(self,X):
@@ -203,8 +209,8 @@ class RNNModel(models.Model):
     
     def evaluate_test(self):
         predicted_y = self.model.predict(self.X_test)
-
         predicted_y = np.squeeze(predicted_y, axis=-1)
+    
 
         num_days = predicted_y.shape[1]  # Assuming this is the number of days
         results = pd.DataFrame(predicted_y, columns=[f'predicted_{i+1}' for i in range(num_days)])
@@ -245,6 +251,9 @@ class RNNModel(models.Model):
             # Create the directory if it doesn't exist
             print("Creating directory " + self.model_dir)
             os.makedirs(self.model_dir)
+        
+        # Save the model
+        self.model.save(self.model_dir + "model.h5")
 
     def deserialize_model(self):
         '''
@@ -287,6 +296,19 @@ class RNNModel(models.Model):
                 result.delete()
         self.num_results = len(self.step_results)
     
+    def compute_average_accuracy(self):
+        self.step_results = StepResult.objects.filter(RNNModel = self)
+        self.num_results = len(self.step_results)
+        if self.num_results == 0:
+            return 0
+        self.avg_accuracy = 0
+        for result in self.step_results:
+            self.avg_accuracy += result.dir_accuracy
+        self.avg_accuracy /= self.num_results
+
+        self.model_metrics["avg_accuracy"] = self.avg_accuracy
+        return self.avg_accuracy
+    
     def visualize_future_distribution(self, isTest = True):
         '''
         Create stacked box and whisker plots for the predicted and real values
@@ -313,7 +335,18 @@ class RNNModel(models.Model):
 
         return fig 
     
-
+@receiver(post_delete, sender=RNNModel)
+def delete_model(sender, instance, **kwargs):
+    '''
+    Delete the model when the RNNModel is deleted
+    '''
+    if os.path.exists(instance.model_dir):
+        print("Deleting model " + instance.model_dir)
+        try:
+            shutil.rmtree(instance.model_dir)
+            print(f"Directory '{instance.model_dir}' and all its contents have been removed.")
+        except OSError as error:
+            print(f"Error: {error}")
 
 
 class StepResult(models.Model):

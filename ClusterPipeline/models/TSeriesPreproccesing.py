@@ -21,7 +21,7 @@ class FeatureSet:
     Class that encapsulates a set of features. A set of features is a subset of the columns in a Dateset object. 
     This is helpful for keeping track of different requirements for different groups of features
     """
-    def __init__(self, scaling_method, name ='', scale_range = (-1,1)):
+    def __init__(self, scaling_method, name ='', scale_range = (-1,1), ticker = None, percentiles = [5,95]):
         self.name = name
         self.cols = []
         self.scaling_method = scaling_method
@@ -29,6 +29,8 @@ class FeatureSet:
         self.scaler = None
 
         self.range = scale_range
+        self.ticker = ticker
+        self.percentiles = percentiles
 
 
 
@@ -145,6 +147,9 @@ class StockDataSet(DataSet):
             raise ValueError("No X_feature_sets created")
         if len(self.y_feature_sets) < 1:
             raise ValueError("No y_feature_sets created")
+        
+        self.group_params.X_feature_sets = self.X_feature_sets
+        self.group_params.y_feature_sets = self.y_feature_sets
 
         print("Dataset Preprocessing Complete")
 
@@ -174,7 +179,7 @@ class StockDataSet(DataSet):
         X_cols = set() 
 
         # Create price features
-        self.df, feature_sets = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'], cluster_features = self.group_params.cluster_features)
+        self.df, feature_sets = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'], cluster_features = self.group_params.cluster_features, ticker = self.ticker)
 
         self.X_feature_sets += feature_sets
         for feature_set in feature_sets:
@@ -184,13 +189,13 @@ class StockDataSet(DataSet):
             print("bb_close in X_cols")
 
         # Create trend features
-        self.df, feature_set = create_trend_vars(self.df,scaling_method=self.scaling_dict['trend_vars'])
+        self.df, feature_set = create_trend_vars(self.df,scaling_method=self.scaling_dict['trend_vars'], ticker = self.ticker)
 
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create percent change variables 
-        self.df, feature_set = create_pctChg_vars(self.df,scaling_method=self.scaling_dict['pctChg_vars'])
+        self.df, feature_set = create_pctChg_vars(self.df,scaling_method=self.scaling_dict['pctChg_vars'], ticker = self.ticker)
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
@@ -198,7 +203,7 @@ class StockDataSet(DataSet):
         pctChg_cols = [col for col in X_cols if "pctChg" in col]
         
         for col in pctChg_cols: 
-            self.df, feature_set = create_rolling_sum_vars(self.df, col, scaling_method=self.scaling_dict['rolling_vars'])
+            self.df, feature_set = create_rolling_sum_vars(self.df, col, scaling_method=self.scaling_dict['rolling_vars'],ticker = self.ticker)
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
         
@@ -231,9 +236,9 @@ class StockDataSet(DataSet):
         #Scale the features in the feature sets
         for feature_set in feature_sets: 
             if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value:
-                scaler = MinMaxPercentileScaler()
+                scaler = MinMaxPercentileScaler(percentile=feature_set.percentiles)
             if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value:
-                scaler = MinMaxPercentileScaler(scaling_mode = 'global')
+                scaler = MinMaxPercentileScaler(scaling_mode = 'global', percentile=feature_set.percentiles)
             scaler.fit(training_df[feature_set.cols])
 
             # After fitting the scaler to the combined training dataframe, transform the individual dataframes
@@ -245,6 +250,17 @@ class StockDataSet(DataSet):
         
         
         return training_df, test_df
+    
+    def scale_transform(self, df, feature_sets):
+        """
+        Scales the features in the feature sets in dataframe form using custom MinMaxPercentileScaler
+        """
+        df = df.copy()
+        #Scale the features in the feature sets
+        for feature_set in feature_sets: 
+            df[feature_set.cols] = feature_set.scaler.transform(df[feature_set.cols])
+        
+        return df
 
     def create_y_targets(self, cols_to_create_targets):
         """
@@ -256,7 +272,7 @@ class StockDataSet(DataSet):
         if self.created_y_targets:
             return
         
-        self.df, feature_set = add_forward_rolling_sums(self.df, cols_to_create_targets, scaling_method=self.scaling_dict['target_vars'])
+        self.df, feature_set = add_forward_rolling_sums(self.df, cols_to_create_targets, scaling_method=self.scaling_dict['target_vars'],ticker=self.ticker)
 
         self.y_feature_sets.append(feature_set)
         self.group_params.y_cols.update(feature_set.cols)
@@ -326,12 +342,12 @@ def get_stock_data(
 
     return df, df.columns.tolist()
 
-def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100], scaling_method = ScalingMethod.SBSG, cluster_features = None) -> (pd.DataFrame, FeatureSet):
+def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100], scaling_method = ScalingMethod.SBSG, cluster_features = None, ticker = None) -> (pd.DataFrame, FeatureSet):
     """
     Create price features from the OHLC data.
     """
     feature_sets = [] 
-    price_feature_set = FeatureSet(scaling_method, 'price_vars',(0,1))
+    price_feature_set = FeatureSet(scaling_method, 'price_vars',(0,1),ticker=ticker)
 
     price_feature_set.cols +=["open", "high", "low","close"] # add close
 
@@ -361,7 +377,7 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
         # We want to scale all of the price cluster features on the same scale.
         # If cluster_feaure[0] is a price_var, the rest will also be
         if cluster_features[0] in price_feature_set.cols:
-            cluster_feature_set = FeatureSet(ScalingMethod.SBSG, 'cluster_vars', (0,1))
+            cluster_feature_set = FeatureSet(ScalingMethod.SBSG, 'cluster_vars', (0,1), ticker=ticker)
             for feature in cluster_features:
                 cluster_feature_set.cols.append(feature)
                 price_feature_set.cols.remove(feature)
@@ -380,11 +396,11 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
     return df, feature_sets
 
 
-def create_trend_vars(df: pd.DataFrame,scaling_method = ScalingMethod.SBS) -> (pd.DataFrame, FeatureSet):
+def create_trend_vars(df: pd.DataFrame,scaling_method = ScalingMethod.SBS, ticker = None) -> (pd.DataFrame, FeatureSet):
     """
     Create trend features which are made up of features that are not price features but are not percent change features.
     """
-    feature_set = FeatureSet(scaling_method,'trend_vars', (0,1))
+    feature_set = FeatureSet(scaling_method,'trend_vars', (0,1),ticker= ticker)
 
     feature_set.cols += ["volume"]
 
@@ -399,7 +415,7 @@ def create_trend_vars(df: pd.DataFrame,scaling_method = ScalingMethod.SBS) -> (p
        
 
 def create_pctChg_vars(
-    df: pd.DataFrame, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1
+    df: pd.DataFrame, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1, ticker = None
 ) -> (pd.DataFrame, FeatureSet):
     """
     Create key target variables from the OHLC processed data.
@@ -423,7 +439,7 @@ def create_pctChg_vars(
     """
     df = df.copy()
 
-    feature_set = FeatureSet(scaling_method,"pctChg_vars")
+    feature_set = FeatureSet(scaling_method,"pctChg_vars", ticker = ticker)
 
     for column in df.columns:
         df['pctChg' + column] = df[column].pct_change() * 100.0
@@ -469,7 +485,7 @@ def create_pctChg_vars(
 
     return df, feature_set
 
-def create_rolling_sum_vars(df: pd.DataFrame, col_name : str, rolling_sum_windows=(1, 2, 3, 4, 5, 6), scaling_method = ScalingMethod.QUANT_MINMAX_G ) -> (pd.DataFrame, FeatureSet):
+def create_rolling_sum_vars(df: pd.DataFrame, col_name : str, rolling_sum_windows=(1, 2, 3, 4, 5, 6), scaling_method = ScalingMethod.QUANT_MINMAX_G, ticker = None ) -> (pd.DataFrame, FeatureSet):
     """
     Create rolling sum variables for the specified column.
 
@@ -487,7 +503,7 @@ def create_rolling_sum_vars(df: pd.DataFrame, col_name : str, rolling_sum_window
     
     df = df.copy()
 
-    feature_set = FeatureSet(scaling_method,col_name + "_rolling")
+    feature_set = FeatureSet(scaling_method,col_name + "_rolling",ticker=ticker)
 
     for roll in rolling_sum_windows:
         new_col_name = "sum" + col_name + "_" + str(roll)
@@ -541,7 +557,7 @@ def create_quarter_cols(df):
     return df
 
 
-def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = ScalingMethod.QUANT_MINMAX) -> (pd.DataFrame, FeatureSet):
+def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = ScalingMethod.QUANT_MINMAX, ticker = None) -> (pd.DataFrame, FeatureSet):
     """
     Add the y val for sumPctChgClCl_X for the next X periods. For example sumPctChgClCl_1
     is the percent change from today's close to tomorrow's close, sumPctChgClCl_2 is the percent
@@ -552,7 +568,7 @@ def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = S
     :param columns: a list of column names
     :return: the DataFrame with the new columns added
     """
-    feature_set = FeatureSet(scaling_method)
+    feature_set = FeatureSet(scaling_method,"target_vars",ticker=ticker)
 
     max_shift = -1
 
