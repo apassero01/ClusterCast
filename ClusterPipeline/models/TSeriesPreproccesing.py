@@ -477,14 +477,14 @@ def create_pctChg_vars(
     # feature_set.cols.append('opCl')
 
     # # Calculations for the percentage changes
-    # df["pctChgClOp"] = np.insert(np.divide(df.open.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    # feature_set.cols.append('pctChgClOp')
+    df["pctChgClOp"] = np.insert(np.divide(df.open.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
+    feature_set.cols.append('pctChgClOp')
 
-    # df["pctChgClLo"] = np.insert(np.divide(df.low.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    # feature_set.cols.append('pctChgClLo')
+    df["pctChgClLo"] = np.insert(np.divide(df.low.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
+    feature_set.cols.append('pctChgClLo')
 
-    # df["pctChgClHi"] = np.insert(np.divide(df.high.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    # feature_set.cols.append('pctChgClHi')
+    df["pctChgClHi"] = np.insert(np.divide(df.high.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
+    feature_set.cols.append('pctChgClHi')
 
     for col in feature_set.cols:
         df[col] = df[col].fillna(df[col].mean())

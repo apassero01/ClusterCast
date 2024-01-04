@@ -300,8 +300,10 @@ class RNNModel(models.Model):
         self.step_results = StepResult.objects.filter(RNNModel = self)
         self.num_results = len(self.step_results)
         if self.num_results == 0:
+            self.avg_accuracy = 0
+            self.model_metrics["avg_accuracy"] = self.avg_accuracy
             return 0
-        self.avg_accuracy = 0
+
         for result in self.step_results:
             self.avg_accuracy += result.dir_accuracy
         self.avg_accuracy /= self.num_results
