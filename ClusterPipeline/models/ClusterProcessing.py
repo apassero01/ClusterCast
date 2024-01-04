@@ -622,6 +622,7 @@ class StockCluster(Cluster):
                 model.buildModel()
                 model.fit(epochs=100, batch_size=16)
                 model.evaluate_test()
+                model.compute_average_accuracy()
                 model.serialize()
                 model.save()
                 num_models += 1
@@ -658,8 +659,10 @@ class StockCluster(Cluster):
             epochs = model.model_metrics['effective_epochs']
 
             #write to output.txt
-            with open("output.txt", "a") as f:
+            with open("output.txt", "w") as f:
                 f.write("Cluster " + str(self.label) + " Model " + str(model.id) + " Accuracy: " + str(accuracy) + " Epochs: " + str(epochs) + "\n")
+            
+            print("Cluster " + str(self.label) + " Model " + str(model.id) + " Accuracy: " + str(accuracy) + " Epochs: " + str(epochs) + "\n")
 
             if accuracy < accuracy_threshold or epochs < epoch_threshold:
                 model.delete()

@@ -196,12 +196,9 @@ class RNNModel(models.Model):
 
         error = self.model.evaluate(self.X_test, self.y_test, verbose=0)
 
-        average_accuracy = self.compute_average_accuracy()
-
         self.model_metrics = {
             "effective_epochs": effective_epochs,
             "error": round(error,2), 
-            "avg_accuracy": average_accuracy,
         }
     
     def predict(self,X):
@@ -299,8 +296,8 @@ class RNNModel(models.Model):
     def compute_average_accuracy(self):
         self.step_results = StepResult.objects.filter(RNNModel = self)
         self.num_results = len(self.step_results)
+        self.avg_accuracy = 0
         if self.num_results == 0:
-            self.avg_accuracy = 0
             self.model_metrics["avg_accuracy"] = self.avg_accuracy
             return 0
 
