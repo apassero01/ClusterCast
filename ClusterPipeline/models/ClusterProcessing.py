@@ -657,6 +657,10 @@ class StockCluster(Cluster):
             accuracy = model.model_metrics['avg_accuracy']
             epochs = model.model_metrics['effective_epochs']
 
+            #write to output.txt
+            with open("output.txt", "a") as f:
+                f.write("Cluster " + str(self.label) + " Model " + str(model.id) + " Accuracy: " + str(accuracy) + " Epochs: " + str(epochs) + "\n")
+
             if accuracy < accuracy_threshold or epochs < epoch_threshold:
                 model.delete()
     
