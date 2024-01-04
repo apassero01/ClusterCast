@@ -445,6 +445,12 @@ def create_pctChg_vars(
         df['pctChg' + column] = df[column].pct_change() * 100.0
         feature_set.cols.append('pctChg' + column)
     df.replace([np.inf, -np.inf], 0, inplace=True)
+
+        # Close moving average differences 
+    ma_cols = [col for col in df.columns if "ma" in col]
+    for col in ma_cols:
+        df['pctChg+' + col+ "Close"] = (abs(df[col] - df['close']) / ((df[col] + df['close']) / 2)) * 100
+        feature_set.cols.append('pctChg+' + col+ "Close")
     
     # # % jump from open to high
     # df['opHi'] = (df.high - df.open) / df.open * 100.0
