@@ -154,10 +154,10 @@ class RNNModel(models.Model):
             new_model.add(TimeDistributed(Dense(1), name='time_distributed_output'))
 
         
-        new_model.compile(loss='mse', optimizer=Adam(learning_rate=0.001))
+        new_model.compile(loss='mse', optimizer=Adam(learning_rate=0.0001))
         self.model = new_model
     
-    def fit(self,epochs=100,batch_size=32):
+    def fit(self,epochs=100,batch_size=16):
          # After building the model
 
         summary_string_list = []

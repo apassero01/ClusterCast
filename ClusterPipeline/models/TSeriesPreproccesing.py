@@ -148,8 +148,8 @@ class StockDataSet(DataSet):
         if len(self.y_feature_sets) < 1:
             raise ValueError("No y_feature_sets created")
         
-        self.group_params.X_feature_sets = self.X_feature_sets
-        self.group_params.y_feature_sets = self.y_feature_sets
+        self.group_params.X_feature_sets += self.X_feature_sets
+        self.group_params.y_feature_sets += self.y_feature_sets
 
         print("Dataset Preprocessing Complete")
 

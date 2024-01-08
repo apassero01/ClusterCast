@@ -262,7 +262,7 @@ class StockPrediction(Prediction):
             'rolling_vars' : ScalingMethod.QUANT_MINMAX,
             'target_vars' : ScalingMethod.QUANT_MINMAX
         }
-        group_params = StockClusterGroupParams(tickers = [self.ticker], interval = self.interval, start_date = start_date, end_date = end_date, target_cols = target_features, cluster_features = [])
+        group_params = StockClusterGroupParams(tickers = [self.ticker], interval = self.interval, start_date = start_date, target_cols = target_features, cluster_features = [])
         group_params.scaling_dict = scaling_dict
 
         stock_dataset = StockDataSet(group_params,self.ticker)

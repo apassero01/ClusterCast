@@ -1,6 +1,6 @@
 from datetime import datetime
-from .SequencePreprocessing import StockSequenceSet, SequenceElement, ScalingMethod
-from .TSeriesPreproccesing import StockDataSet
+from ClusterPipeline.models.SequencePreprocessing import StockSequenceSet, SequenceElement, ScalingMethod
+from ClusterPipeline.models.TSeriesPreproccesing import StockDataSet
 from tslearn.clustering import TimeSeriesKMeans
 import numpy as np
 import plotly.graph_objects as go
@@ -19,7 +19,7 @@ from tensorflow.keras.backend import clear_session
 import os
 from tensorflow.keras.callbacks import EarlyStopping
 import sys
-from .RNNModels import RNNModel, ModelTypes, StepResult
+from ClusterPipeline.models.RNNModels import RNNModel, ModelTypes, StepResult
 from tensorflow.keras.initializers import glorot_uniform, zeros
 from django.dispatch import receiver
 import shutil
@@ -59,7 +59,7 @@ class SupportedParams(models.Model):
                     }
         cluster_group = StockClusterGroup()
         cluster_group.set_group_params(group_params)
-        cluster_group.create_data_set()
+        cluster_group.create_data_set(to_train=False)
         cluster_group.create_sequence_set()
 
         self.features = list(cluster_group.sequence_set.group_params.X_cols)
@@ -84,7 +84,7 @@ class SupportedParams(models.Model):
                     }
         cluster_group = StockClusterGroup()
         cluster_group.set_group_params(group_params)
-        cluster_group.create_data_set()
+        cluster_group.create_data_set(to_train=False)
         cluster_group.create_sequence_set()
 
         self.pct_chg_features = next(filter(lambda feature_set: feature_set.name == 'pctChg_vars', cluster_group.group_params.X_feature_sets)).cols
@@ -107,8 +107,6 @@ class ClusterGroupParams(models.Model):
     n_steps = models.IntegerField()
     scaling_dict = models.JSONField(default=dict)
     name = models.CharField(max_length=400,default="")
-    X_feature_dict = models.JSONField(default=dict)
-    y_feature_dict = models.JSONField(default=dict)
 
     class Meta:
         abstract = True
@@ -119,6 +117,8 @@ class ClusterGroupParams(models.Model):
         self.data_sets = [] 
         self.train_seq_elements = None
         self.test_seq_elements = None
+        self.X_feature_sets = []
+        self.y_feature_sets = []
     
     def set_scaling_dict(self,scaling_dict):
         self.scaling_dict = {
@@ -246,6 +246,8 @@ class StockClusterGroup(ClusterGroup):
         self.sequence_set = StockSequenceSet(self.group_params)
         self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
         self.group_params = self.sequence_set.group_params
+        self.X_feature_dict = self.group_params.X_feature_dict
+        self.y_feature_dict = self.group_params.y_feature_dict
     
     def run_clustering(self,alg = 'TSKM',metric = "euclidean"):
         '''
@@ -256,8 +258,8 @@ class StockClusterGroup(ClusterGroup):
         metric: The metric to use for the clustering algorithm. default is euclidean
         '''
         self.get_3d_array()
-        X_train_cluster = self.filter_by_features(self.X_train, self.group_params.cluster_features)
-        X_test_cluster = self.filter_by_features(self.X_test, self.group_params.cluster_features)
+        X_train_cluster = self.filter_by_features(self.X_train, self.group_params.cluster_features, self.X_feature_dict)
+        X_test_cluster = self.filter_by_features(self.X_test, self.group_params.cluster_features, self.X_feature_dict)
 
 
         if alg == 'TSKM':
@@ -347,7 +349,7 @@ class StockClusterGroup(ClusterGroup):
 
             # Create the object and pass in the label, cluster_group and associated metrics 
             cluster = StockCluster.objects.create(label=label, cluster_group=self, cluster_metrics=metrics, centroid=centroid)
-            cluster.initialize(cur_train_seq_elements,cur_test_seq_elements)
+            cluster.initialize(cur_train_seq_elements,cur_test_seq_elements,self.group_params.X_feature_dict,self.group_params.y_feature_dict)
             self.clusters.append(cluster)
 
 
@@ -385,8 +387,8 @@ class StockClusterGroup(ClusterGroup):
         '''
         Method for training a general model on the entire data set. This model will be used for fine tuning on the individual clusters.
         '''
-        X_train = self.filter_by_features(self.X_train, model_features)
-        X_test = self.filter_by_features(self.X_test, model_features)
+        X_train = self.filter_by_features(self.X_train, model_features, self.X_feature_dict)
+        X_test = self.filter_by_features(self.X_test, model_features, self.X_feature_dict)
         y_train = self.y_train
         y_test = self.y_test
 
@@ -396,12 +398,12 @@ class StockClusterGroup(ClusterGroup):
         clear_session()
 
 
-    def filter_by_features(self,seq, feature_list):
+    def filter_by_features(self,seq, feature_list, X_feature_dict):
         '''
         Method to filter a 3d array of sequences by a list of features.
         '''
         seq = seq.copy()
-        indices = [self.group_params.X_feature_dict[x] for x in feature_list]
+        indices = [X_feature_dict[x] for x in feature_list]
         # Using numpy's advanced indexing to select the required features
         return seq[:, :, indices]
     
@@ -435,6 +437,7 @@ class StockClusterGroup(ClusterGroup):
         '''
         Method to load a saved group from the database. We perform the preprocessing steps that are necessary and avoid the ones that are not
         '''
+        self.group_params.initialize()
         self.create_data_set(to_train = False)
         self.create_sequence_set()
         self.load_saved_clusters()
@@ -456,7 +459,7 @@ class StockClusterGroup(ClusterGroup):
             cluster_label = cluster.label
             cur_train_seq_elements = [x for x in train_seq_elements if x.cluster_label == cluster_label]
             cur_test_seq_elements = [x for x in test_seq_elements if x.cluster_label == cluster_label]
-            cluster.initialize(cur_train_seq_elements,cur_test_seq_elements)
+            cluster.initialize(cur_train_seq_elements,cur_test_seq_elements,self.group_params.X_feature_dict,self.group_params.y_feature_dict)
 
         
 
@@ -478,7 +481,7 @@ class Cluster(models.Model):
     class Meta:
         abstract = True
     
-    def initialize(self,train_seq_elements,test_seq_elements):
+    def initialize(self,train_seq_elements,test_seq_elements,X_feature_dict, y_feature_dict):
         '''
         Method to initialize the cluster. This method is called after the cluster is created and the sequences are assigned to it.
         '''
@@ -486,6 +489,8 @@ class Cluster(models.Model):
         self.test_seq_elements = test_seq_elements
         self.get_3d_array()
         self.group_name = self.cluster_group.group_params.name
+        self.X_feature_dict = X_feature_dict
+        self.y_feature_dict = y_feature_dict
 
         self.cluster_dir = f"SavedModels/{self.group_name}/Cluster{self.label}/"
 
@@ -527,7 +532,7 @@ class StockCluster(Cluster):
         # get cluster features and corresponding index from X_feature_dict
         cluster_features = self.cluster_group.group_params.cluster_features
 
-        X_cluster = self.cluster_group.filter_by_features(arr_3d, self.cluster_group.group_params.cluster_features)
+        X_cluster = self.cluster_group.filter_by_features(arr_3d, self.cluster_group.group_params.cluster_features, self.X_feature_dict)
         
         traces = [] 
         avg_cluster = np.mean(X_cluster,axis = 0)
@@ -582,8 +587,8 @@ class StockCluster(Cluster):
 
         for i in range(num_feauture_iterations):
             features = self.random_sample_features(self.cluster_group.group_params.feature_sample_size, model_features,self.cluster_group.group_params.strong_predictors)
-            X_train_filtered = self.cluster_group.filter_by_features(self.X_train, features)
-            X_test_filtered = self.cluster_group.filter_by_features(self.X_test, features)
+            X_train_filtered = self.cluster_group.filter_by_features(self.X_train, features, self.X_feature_dict)
+            X_test_filtered = self.cluster_group.filter_by_features(self.X_test, features, self.X_feature_dict)
 
             for index,model_param in enumerate(model_params):
                 if model_param['model_type'] == "SAE":

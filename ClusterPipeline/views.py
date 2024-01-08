@@ -78,11 +78,10 @@ def cluster_run(request):
         training_features = []
         for feature in training_features_cats:
             training_features += col_dict[feature]
-        
-        print(training_features)
 
         # Process the data (this is where you would include your logic)
         group_params = CP.StockClusterGroupParams.objects.create(tickers = tickers, start_date = start_date, end_date = end_date, n_steps = steps, cluster_features = cluster_features, target_cols = target_features, interval=interval, training_features = training_features)
+        group_params.initialize()
         group_params.set_scaling_dict(scaling_dict)
         group_params.feature_sample_size = feature_sample_size  
         group_params.feature_sample_num = feature_sample_num
