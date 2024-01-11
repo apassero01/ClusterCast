@@ -16,7 +16,8 @@ from django.http import HttpResponse
 import ast
 from .thread import CreateGroupBackground
 from django.core.cache import cache
-from datetime import date
+from datetime import date, datetime, timedelta
+import yfinance as yf
 
 # Create your views here.
 @csrf_exempt
@@ -236,7 +237,10 @@ def prediction_detail(request,prediction_id):
     pred_df_json = prediction_df.to_json(orient='split', date_format='iso')
 
     
-    close_df = prediction.generic_dataset.df[['close']].reset_index()
+    close_df = yf.download(prediction.ticker, start=start_date, end=(date.today()+timedelta(days=1)).strftime('%Y-%m-%d'), interval=prediction.interval)
+    close_df = close_df[['Close']].reset_index()
+    close_df = close_df.rename(columns={'Close':'close'})
+    
     close_df_json = close_df.to_json(orient='split', date_format='iso')
 
     return render(request, 'ClusterPipeline/prediction_detail.html',{'pred_df': pred_df_json, 'close_df': close_df_json, 'tickers': tickers, 'prediction_id': prediction_id, 'ticker': prediction.ticker, 'interval': prediction.interval, 'prediction_start_date': prediction.prediction_start_date.strftime('%Y-%m-%d')})

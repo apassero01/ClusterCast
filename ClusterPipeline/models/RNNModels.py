@@ -144,8 +144,14 @@ class RNNModel(models.Model):
                     cur_encoder_layers += 1
                 new_model.add(next_layer)
                 total_layers += 1
+            
+            for i in range(total_layers,len(self.layers)):
+                if self.layers[i].name.split('_')[0] == 'LSTM' or self.layers[i].name.split('_')[0] == 'GRU':
+                    break
+                new_model.add(self.layers[i])
+                total_layers += 1
 
-            new_model.add(LSTM(units = 10,return_sequences = False))
+            
             new_model.add(RepeatVector(self.output_shape, name = 'repeat_vector'))
             
             for i in range(total_layers,len(self.layers)):

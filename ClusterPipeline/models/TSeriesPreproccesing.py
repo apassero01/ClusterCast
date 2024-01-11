@@ -131,10 +131,12 @@ class StockDataSet(DataSet):
         
         
         if to_train:
-            print("Running RandomForest Regressor to find strong predictors")
-            if not hasattr(self.group_params, 'strong_predictors'):
-                strong_predictors = self.strong_predictors_rf()
-                self.group_params.strong_predictors = strong_predictors 
+            # print("Running RandomForest Regressor to find strong predictors")
+            # if not hasattr(self.group_params, 'strong_predictors'):
+            #     strong_predictors = self.strong_predictors_rf()
+            #     self.group_params.strong_predictors = strong_predictors 
+
+            self.group_params.strong_predictors = [] #TODO remove this when strong predictors are implemented
 
             print("RandomForest Compete")
         

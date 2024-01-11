@@ -614,11 +614,21 @@ class StockCluster(Cluster):
                                 num_autoencoder_layers=num_encoder_layers,
                                 num_encoder_layers=num_encoder_layers,
                                 )
+                
+                num_nn_layers = 0 
                 for layer in model_param['layers']:
                     if layer['type'] == "LSTM":
-                        model.addLSTMLayer(layer['units'],activation=layer["activation"])
+                        if num_nn_layers + 1 == num_encoder_layers:
+                            model.addLSTMLayer(layer['units'],return_sequences=False,activation=layer["activation"])
+                        else:
+                            model.addLSTMLayer(layer['units'],activation=layer["activation"])
+                        num_nn_layers += 1
                     elif layer['type'] == "GRU":
-                        model.addGRULayer(layer['units'],activation=layer["activation"])
+                        if num_nn_layers + 1 == num_encoder_layers:
+                            model.addGRULayer(layer['units'],return_sequences=False,activation=layer["activation"])
+                        else:
+                            model.addGRULayer(layer['units'],activation=layer["activation"])
+                        num_nn_layers += 1
                     elif layer['type'] == "Dropout":
                         model.addDropoutLayer(layer['rate'])
                     else:
@@ -689,7 +699,15 @@ class StockCluster(Cluster):
         num_strong_predictors = math.ceil(num_features * strong_ratio)
         other_predictors = num_features - num_strong_predictors
 
-        strong_predictors = np.random.choice(strong_predictors, num_strong_predictors, replace=False)
+        if num_strong_predictors > len(strong_predictors):
+            num_strong_predictors = len(strong_predictors)
+            other_predictors = num_features - num_strong_predictors
+
+        if num_strong_predictors > 0:
+            strong_predictors = np.random.choice(strong_predictors, num_strong_predictors, replace=False)
+        else:
+            strong_predictors = []
+        
         other_predictors = np.random.choice([x for x in features if x not in strong_predictors], other_predictors, replace=False)
 
         return list(strong_predictors) + list(other_predictors)
