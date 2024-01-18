@@ -120,7 +120,7 @@ def cluster_group_detail(request, id):
     for cluster in cluster_group.clusters: 
         if (len(cluster.models) == 0):
             continue
-        fig1 = cluster.visualize_cluster()
+        fig1 = cluster.visualize_cluster_2d()
         sorted_models = cluster.sort_models()
         fig2 = sorted_models[0].visualize_future_distribution()
         fig1_json = json.loads(plotly.io.to_json(fig1))

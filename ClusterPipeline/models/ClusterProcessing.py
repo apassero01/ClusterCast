@@ -244,7 +244,7 @@ class StockClusterGroup(ClusterGroup):
         '''
 
         self.sequence_set = StockSequenceSet(self.group_params)
-        self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
+        self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=False)
         self.group_params = self.sequence_set.group_params
         self.X_feature_dict = self.group_params.X_feature_dict
         self.y_feature_dict = self.group_params.y_feature_dict
@@ -571,6 +571,45 @@ class StockCluster(Cluster):
                 zaxis=dict(range=y_range),
                 camera=camera  # Apply the camera settings
             )
+        )
+
+        return fig
+    
+    def visualize_cluster_2d(self, isTrain = True, y_range = [0,1]):
+        if isTrain:
+            arr_3d = self.X_train
+        else:
+            arr_3d = self.X_test
+
+        # get cluster features and corresponding index from X_feature_dict
+        cluster_features = self.cluster_group.group_params.cluster_features
+
+        X_cluster = self.cluster_group.filter_by_features(arr_3d, self.cluster_group.group_params.cluster_features, self.X_feature_dict)
+        
+        traces = [] 
+        avg_cluster = np.mean(X_cluster,axis = 0)
+        
+        x = np.arange(avg_cluster.shape[0])[::-1]
+
+        # manutally create array with 10 colors 
+        colors = ['red','aqua','seagreen','orange','purple','pink','yellow','black','brown','grey']
+
+        for feature_idx in range(avg_cluster.shape[1]):
+            feature = cluster_features[feature_idx]
+
+            z_avg = avg_cluster[::-1, feature_idx]
+        
+            # select random color 
+            
+            traces.append(go.Scatter(x=x, y=z_avg, mode='lines', line=dict(color=colors[feature_idx], width=2), name = feature))
+
+        fig = go.Figure(data=traces)
+
+        fig.update_layout(
+            title="Cluster " + str(self.label),
+            xaxis_title='Time',
+            yaxis_title='Value',
+            yaxis=dict(range=y_range),
         )
 
         return fig
