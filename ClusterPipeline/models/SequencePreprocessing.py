@@ -449,6 +449,9 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
     X_feature_dict = {col: index for col, index in zip(X_cols_list, X_indices_seq)}
     y_feature_dict = {col: index for col, index in zip(y_cols_list, y_indices_seq)}
 
+    print(y_feature_dict)
+    print([df_cols.columns.get_loc(col) for col in y_cols_list])
+
     sequence_elements = []
     future_seq_elements = [] 
 

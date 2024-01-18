@@ -58,7 +58,8 @@ def cluster_run(request):
 
         
 
-        target_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
+        # target_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
+        target_features = ['pctChgclose-14','pctChgclose-13','pctChgclose-12','pctChgclose-11','pctChgclose-10','pctChgclose-9','pctChgclose-8','pctChgclose-7','pctChgclose-6','pctChgclose-5','pctChgclose-4','pctChgclose-3','pctChgclose-2','pctChgclose-1','pctChgclose-0','pctChgclose+1','pctChgclose+2','pctChgclose+3','pctChgclose+4','pctChgclose+5','pctChgclose+6']
 
         scaling_dict = {
             'price_vars': SP.ScalingMethod.UNSCALED,

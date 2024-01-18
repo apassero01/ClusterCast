@@ -138,7 +138,7 @@ class StockClusterGroupParams(ClusterGroupParams):
 
     def initialize(self):
         super().initialize()
-        self.name = str(self.tickers) + str(self.start_date) + "-" + str(self.end_date)+ "-" + str(self.n_steps) +"steps" + "-" + str(self.interval)+ "-" + str(self.target_cols) + "-" + str(self.cluster_features)
+        self.name = str(self.tickers) + str(self.start_date) + "-" + str(self.end_date)+ "-" + str(self.n_steps) +"steps" + "-" + str(self.interval)+ "-" + str(self.cluster_features)
     
     def create_model_dir(self):
         model_dir = f"SavedModels/{self.name}/"
@@ -406,6 +406,15 @@ class StockClusterGroup(ClusterGroup):
         indices = [X_feature_dict[x] for x in feature_list]
         # Using numpy's advanced indexing to select the required features
         return seq[:, :, indices]
+
+    def filter_y_by_features(self,seq, feature_list, y_feature_dict):
+        '''
+        Method to filter a 3d array of sequences by a list of features.
+        '''
+        seq = seq.copy()
+        indices = [y_feature_dict[x] for x in feature_list]
+        # Using numpy's advanced indexing to select the required features
+        return seq[:, indices]
     
     def get_3d_array(self): 
         '''
@@ -582,6 +591,10 @@ class StockCluster(Cluster):
         
         model_params = self.cluster_group.group_params.model_params 
 
+        target_features = self.cluster_group.group_params.target_cols
+        y_train_filtered = self.cluster_group.filter_y_by_features(self.y_train, target_features, self.y_feature_dict)
+        y_test_filtered = self.cluster_group.filter_y_by_features(self.y_test, target_features, self.y_feature_dict)
+
         num_models = 0 
         self.models = [] 
 
@@ -604,11 +617,16 @@ class StockCluster(Cluster):
                 
                 num_encoder_layers = model_param['num_encoder_layers']
 
-                model = RNNModel.objects.create(cluster = self)
+                if 'sum' in target_features[0]:
+                    target_feature_type = 'cumulative'
+                else:
+                    target_feature_type = 'lag'
+
+                model = RNNModel.objects.create(cluster = self, target_feature_type = target_feature_type)
                 print("Creating Model " + str(num_models) + " for cluster " + str(self.label) + " model number " + str(index) + " feature iteration " + str(i))
                 model.initialize(model_type = model_type,
-                                X_train = X_train_filtered, y_train = self.y_train,
-                                X_test = X_test_filtered,y_test = self.y_test,
+                                X_train = X_train_filtered, y_train = y_train_filtered,
+                                X_test = X_test_filtered,y_test = y_test_filtered,
                                 model_features=features,
                                 model_dir = self.cluster_dir+"model"+str(num_models)+"/",
                                 num_autoencoder_layers=num_encoder_layers,
@@ -664,7 +682,7 @@ class StockCluster(Cluster):
         
         return self.best_model_idx
     
-    def hard_filter_models(self,accuracy_threshold = 60, epoch_threshold = 7):
+    def hard_filter_models(self,accuracy_threshold = 50, epoch_threshold = 5):
         '''
         Method to filter the models based on a dictionary of filters
         '''

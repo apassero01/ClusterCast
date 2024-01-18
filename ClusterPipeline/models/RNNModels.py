@@ -1,6 +1,7 @@
 from keras.layers import RepeatVector, TimeDistributed
-from tensorflow.keras.models import Sequential, clone_model
-from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization
+from tensorflow.keras.models import Sequential, clone_model, Model
+from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization,Input,Masking,Flatten,Permute,RepeatVector,Multiply,Activation
+from tensorflow.keras.regularizers import L1, L2, L1L2
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.backend import clear_session
 from enum import Enum
@@ -36,6 +37,7 @@ class RNNModel(models.Model):
     model_type_str = models.CharField(max_length=1000,default = 'None')
     num_encoder_layers = models.IntegerField(default = 0)
     model_metrics = models.JSONField(default=dict)
+    target_feature_type = models.CharField(max_length=1000,default = 'cumulative')
 
     def initialize(self,X_train, y_train, X_test, y_test, model_type = None, model_features = None, model_dir = None, num_autoencoder_layers= None, num_encoder_layers = None):
         self.layers = [] 
@@ -167,10 +169,14 @@ class RNNModel(models.Model):
          # After building the model
 
         summary_string_list = []
-        self.model.summary(print_fn=lambda x: summary_string_list.append(x))
-        self.summary_string = "\n".join(summary_string_list).replace('"', '\\"')
-        self.summary_string = self.summary_string.replace("'", "\\'")
-        self.summary_string = self.summary_string.replace("\n", "\\n")
+
+        self.model = create_modelAE(self.input_shape[2])
+
+        # self.model.summary(print_fn=lambda x: summary_string_list.append(x))
+        # self.summary_string = "\n".join(summary_string_list).replace('"', '\\"')
+        # self.summary_string = self.summary_string.replace("'", "\\'")
+        # self.summary_string = self.summary_string.replace("\n", "\\n")
+        self.summary_string = " "
 
         # Before training, inspect the shape of training and validation data
         print("Training data shape:", self.X_train.shape, self.y_train.shape)
@@ -213,7 +219,13 @@ class RNNModel(models.Model):
     def evaluate_test(self):
         predicted_y = self.model.predict(self.X_test)
         predicted_y = np.squeeze(predicted_y, axis=-1)
-    
+
+        if self.target_feature_type == 'lag':
+            predicted_y = predicted_y[:,-6:]
+            self.y_test = self.y_test[:,-6:]
+
+            predicted_y = np.cumsum(predicted_y,axis=1)
+            self.y_test = np.cumsum(self.y_test,axis=1)
 
         num_days = predicted_y.shape[1]  # Assuming this is the number of days
         results = pd.DataFrame(predicted_y, columns=[f'predicted_{i+1}' for i in range(num_days)])
@@ -353,6 +365,70 @@ def delete_model(sender, instance, **kwargs):
         except OSError as error:
             print(f"Error: {error}")
 
+
+def create_modelAE(input_shape, latent_dim=6):
+    # Input layer
+    input_layer = Input(shape=(None, input_shape),name = 'input_layer')
+
+    # masking_layer = Masking(mask_value=0.0, name='masking_layer')(input_layer)
+
+    # Encoder
+    encoder_lstm1 = LSTM(units=50, activation='tanh', return_state=True,return_sequences=True,
+                     name='encoder_lstm_1_freeze', kernel_regularizer=L2(.001), recurrent_regularizer=L2(.001))
+    encoder_outputs1 = encoder_lstm1(input_layer)
+    encoder_states1 = encoder_outputs1[1:]
+
+    encoder_lstm2 = LSTM(units=25, activation='tanh', return_state=True,return_sequences=True, name = 'encoder_lstm_2_freeze',
+                         )
+    encoder_outputs2 = encoder_lstm2(encoder_outputs1[0])
+    encoder_states2 = encoder_outputs2[1:]
+
+    encoder_lstm3 = LSTM(units=15, activation='tanh', return_state=True,return_sequences=True, name='encoder_lstm_3_freeze')
+    encoder_outputs3 = encoder_lstm3(encoder_outputs2[0])
+    encoder_states3 = encoder_outputs3[1:]
+
+    encoder_lstm4 = LSTM(units=10, activation='tanh', return_state=True,return_sequences=True, name='encoder_lstm_4_restore')
+    encoder_outputs4 = encoder_lstm4(encoder_outputs3[0])
+    encoder_states4 = encoder_outputs4[1:]
+
+
+    # attention = Dense(1, activation='tanh')(encoder_lstm4)
+    # attention = Flatten()(attention)
+    # attention_weights = Activation('softmax')(attention)
+    # context = Multiply()([encoder_lstm4, Permute([2, 1])(RepeatVector(6)(attention_weights))])
+
+    decoder_inputs = RepeatVector(21, name='repeat_vector')(encoder_states4[0])
+    
+
+    # Decoder
+    decoder_lstm1 = LSTM(units=50, activation='tanh', return_sequences=True, name='decoder_lstm_1_freeze',
+    
+                        )(decoder_inputs, initial_state=encoder_states1)
+    decoder_lstm2 = LSTM(units=25, activation='tanh', return_sequences=True, name='decoder_lstm_2_freeze',
+                        )(decoder_lstm1, initial_state=encoder_states2)
+    decoder_lstm3 = LSTM(units=15, activation='tanh', return_sequences=True, name='decoder_lstm_3_freeze',
+                         )(decoder_lstm2, initial_state=encoder_states3)
+    decoder_lstm4 = LSTM(units=10, activation='tanh', return_sequences=True, name='decoder_lstm_4_restore',
+                         )(decoder_lstm3, initial_state=encoder_states4)
+
+    # decoder_lstm3 = LSTM(units=5, activation='tanh', return_sequences=True, name='decoder_lstm_3_restore',
+    #                      )(decoder_dropout2)
+    # decoder_dropout3 = Dropout(0.2, name='decoder_dropout_3_restore')(decoder_lstm3)
+
+    
+
+    time_distributed_output = TimeDistributed(Dense(1), name='time_distributed_output')(decoder_lstm4)
+
+    # final_output = time_distributed_output[:, -6:, :]
+
+    # Create the model
+    model_lstm = Model(inputs=input_layer, outputs=time_distributed_output)
+
+    # Compile the model
+    optimizer = Adam(learning_rate=0.001)
+    model_lstm.compile(optimizer=optimizer, loss="mae")
+
+    return model_lstm
 
 class StepResult(models.Model):
     steps_in_future = models.IntegerField(default=0)
