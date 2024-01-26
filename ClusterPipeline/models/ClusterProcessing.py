@@ -50,6 +50,7 @@ class SupportedParams(models.Model):
         interval = '1d'
         cluster_features = ['pctChgclose_cumulative']
         group_params = StockClusterGroupParams(start_date = start, tickers = tickers, interval = interval, target_cols = target_cols, n_steps = n_steps,cluster_features = cluster_features)
+        group_params.initialize()
         group_params.scaling_dict = {
                     'price_vars': ScalingMethod.SBSG,
                     'trend_vars' : ScalingMethod.SBS,
@@ -75,6 +76,7 @@ class SupportedParams(models.Model):
         interval = '1d'
         cluster_features = ['pctChgclose_cumulative']
         group_params = StockClusterGroupParams(start_date = start, tickers = tickers, interval = interval, target_cols = target_cols, n_steps = n_steps,cluster_features = cluster_features)
+        group_params.initialize()
         group_params.scaling_dict = {
                     'price_vars': ScalingMethod.SBSG,
                     'trend_vars' : ScalingMethod.SBS,
@@ -244,7 +246,7 @@ class StockClusterGroup(ClusterGroup):
         '''
 
         self.sequence_set = StockSequenceSet(self.group_params)
-        self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=False)
+        self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
         self.group_params = self.sequence_set.group_params
         self.X_feature_dict = self.group_params.X_feature_dict
         self.y_feature_dict = self.group_params.y_feature_dict
@@ -424,7 +426,7 @@ class StockClusterGroup(ClusterGroup):
         '''
         Method to generate a new group. This method is used when the user wants to run the pipeline from scratch
         '''
-        model_features = self.group_params.training_features;
+        model_features = self.group_params.training_features
         self.create_data_set()
         self.create_sequence_set()
         self.run_clustering()
@@ -589,7 +591,7 @@ class StockCluster(Cluster):
         traces = [] 
         avg_cluster = np.mean(X_cluster,axis = 0)
         
-        x = np.arange(avg_cluster.shape[0])[::-1]
+        x = np.arange(avg_cluster.shape[0])
 
         # manutally create array with 10 colors 
         colors = ['red','aqua','seagreen','orange','purple','pink','yellow','black','brown','grey']
@@ -597,7 +599,7 @@ class StockCluster(Cluster):
         for feature_idx in range(avg_cluster.shape[1]):
             feature = cluster_features[feature_idx]
 
-            z_avg = avg_cluster[::-1, feature_idx]
+            z_avg = avg_cluster[:, feature_idx]
         
             # select random color 
             

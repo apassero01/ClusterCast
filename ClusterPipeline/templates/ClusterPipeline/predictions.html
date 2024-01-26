@@ -74,7 +74,7 @@
     <!-- Include the cluster visualization template -->
     <div class="prediction-container"> 
         <div class="form-container">
-            <form method="get" action="{% url 'ClusterCast-predict' %}">
+            <form method="get" action="{% url 'ClusterCast-forcast' %}">
                 <div class="input-group">
                     <label for="ticker">Ticker:</label>
                     <select id="ticker" name="ticker">
@@ -91,6 +91,9 @@
                     <label for="start">Prediction Start:</label>
                     <input type="date" id="start" name="start">
                 </div>
+                <div class="input-group">
+                    <label for="end">Prediction End:</label>
+                    <input type="date" id="end" name="end">
                 <button type="submit" id="loadDataButton" onclick="showLoader()">Predict</button>
             </form>
         </div>        
