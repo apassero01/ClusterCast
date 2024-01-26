@@ -11,5 +11,6 @@ admin.site.register(CP.SupportedParams)
 admin.site.register(RM.StepResult)
 admin.site.register(RM.RNNModel)
 admin.site.register(Pred.StockPrediction)
+admin.site.register(Pred.StockForcastTimeline)
 
 # Register your models here.

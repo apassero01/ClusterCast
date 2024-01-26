@@ -277,9 +277,10 @@ class RNNModel(models.Model):
         self.model = tf.keras.models.load_model(self.model_dir + "model.h5")
 
     def generate_results(self):
+        self.step_results = self.model_results.all()
         results = {
-            "train_set_length": len(self.X_train),
-            "test_set_length": len(self.y_test),
+            "train_set_length": self.step_results[0].train_set_length,
+            "test_set_length": self.step_results[0].test_set_length,
             "cluster_label": int(self.cluster.label),
             "step_accuracy": [],
             "step_accuracy_weighted": [],
@@ -287,7 +288,7 @@ class RNNModel(models.Model):
             "step_actual_return": [],
             "step_p_l": [],
         }
-        self.step_results = self.model_results.all()
+        
         for result in self.step_results:
             results["step_accuracy"].append(int(result.dir_accuracy))
             results["step_accuracy_weighted"].append(int(result.weighted_dir_acc))
