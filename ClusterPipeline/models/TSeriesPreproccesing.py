@@ -211,7 +211,7 @@ class StockDataSet(DataSet):
         
 
         # Update the group params with the new  columns
-        self.group_params.X_feature_sets = self.X_feature_sets
+        self.group_params.X_feature_sets.append(self.X_feature_sets)
         self.group_params.X_cols.update(X_cols)
 
         self.created_features = True

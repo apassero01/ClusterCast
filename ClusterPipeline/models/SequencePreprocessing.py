@@ -207,8 +207,7 @@ class StockSequenceSet(SequenceSet):
             cuma_feature_set.cols.append(new_feature)
             X_feature_dict[new_feature] = features_length + new_features.index(new_feature) 
         
-        self.group_params.X_feature_dict = X_feature_dict
-        return cuma_feature_set
+        return cuma_feature_set, X_feature_dict
     
     def get_3d_array(self,scaled = True):
         train_seq_elements = self.group_params.train_seq_elements
@@ -252,12 +251,15 @@ class StockSequenceSet(SequenceSet):
             self.create_cuma_pctChg_features()
 
     def create_cuma_pctChg_features(self):
-            for data_set in self.data_sets:
-                pct_Chg_feautures = (filter(lambda feature_set: feature_set.name == 'pctChg_vars' or feature_set.name == 'rolling_pctChg_vars', data_set.X_feature_sets))
-                for pct_Chg_feauture in pct_Chg_feautures:
-                    cuma_feature_set = self.add_cuma_pctChg_features(pct_Chg_feauture)
+            first_data_set = self.group_params.data_sets[0]
+            pct_Chg_feautures = (filter(lambda feature_set: feature_set.name == 'pctChg_vars' or feature_set.name == 'rolling_pctChg_vars', first_data_set.X_feature_sets))
+            for pct_Chg_feauture in pct_Chg_feautures:
+                cuma_feature_set, X_feauture_dict = self.add_cuma_pctChg_features(pct_Chg_feauture)
+                for data_set in self.group_params.data_sets:
                     data_set.X_feature_sets.append(cuma_feature_set)
-                    self.group_params.X_cols.update(cuma_feature_set.cols)
+                self.group_params.X_feature_dict = X_feauture_dict
+                self.group_params.X_cols.update(cuma_feature_set.cols)
+            print(len(self.group_params.X_feature_dict))
 
 
 
