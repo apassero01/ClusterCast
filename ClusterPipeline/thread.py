@@ -7,6 +7,7 @@ import sys
 class CreateGroupBackground(threading.Thread):
     def __init__(self, group_params):
         self.group_params = group_params 
+        self.group_params.initialize()
         threading.Thread.__init__(self)
 
     def run(self):
