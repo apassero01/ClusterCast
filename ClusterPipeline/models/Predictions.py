@@ -109,7 +109,7 @@ class StockPrediction(Prediction):
             StockClusterGroup.objects.get(group_params=group_params)
             for group_params in all_group_params
         ]
-        all_dfs = []
+        all_rnn_predictions = [] 
         for cluster_group in all_groups:
             try:
                 cluster_group.load_saved_group()
@@ -118,19 +118,16 @@ class StockPrediction(Prediction):
                 print(cluster_group.id)
                 continue
             print("Predicting on group {}".format(cluster_group.id))
-            df = self.predict_by_group(
+            rnn_predictions = self.predict_by_group(
                 cluster_group,
                 length_factor,
                 total_model_accuracy_thresh,
                 individual_model_accuracy_thresh,
                 epochs_threshold,
             )
-            all_dfs.append(df.T)
+            all_rnn_predictions.append(all_rnn_predictions)
 
-        joined_df = self.create_pred_df(all_dfs)
-        self.save_data_frame(joined_df)
-
-        return joined_df
+        return all_rnn_predictions
 
     def predict_by_group(
         self,
@@ -159,7 +156,7 @@ class StockPrediction(Prediction):
 
         target_scaler = sequence_set.group_params.y_feature_sets[0].scaler
 
-        prediction_dfs = []
+        rnn_predictions = []
 
         future_sequence_elements = [
             future_sequence_elements[0]
@@ -257,44 +254,17 @@ class StockPrediction(Prediction):
                 print("Daily Accuracy")
                 print(daily_accuracy)
                 formatted_dates = [date.strftime("%Y-%m-%d") for date in future_dates]
-                rows = {
-                    "date": [
-                        "avg_accuracy",
-                        "effective_epochs",
-                        "start_date",
-                        "group_id",
-                        "cluster_id",
-                        "model_id",
-                        "status",
-                    ]
-                    + formatted_dates,
-                    str(model_id)
-                    + "-"
-                    + str(num_preds): [
-                        np.mean(daily_accuracy),
-                        model.model_metrics["effective_epochs"],
-                        self.prediction_start_date.strftime("%Y-%m-%d"),
-                        cluster_group.id,
-                        model.cluster.id,
-                        str(model_id),
-                        1,
-                    ]
-                    + price_predictions,
-                }
+                
+                rnn_prediction = model.create_prediction(price_predictions, formatted_dates, self, end_day_close)
+                rnn_predictions.append(rnn_prediction)
 
-                # Convert rows to DataFrame
-                pred_df = pd.DataFrame(rows)
-                prediction_dfs.append(pred_df)
                 num_preds += 1
 
             # clear session and delete model
             clear_session()
             del model.model
 
-        joined_df = self.create_pred_df(prediction_dfs)
-        self.save_data_frame(joined_df)
-
-        return joined_df
+        return rnn_predictions
 
     def mirror_group(self, stock_dataset, cluster_group):
         """
@@ -411,6 +381,7 @@ class StockPrediction(Prediction):
             target_cols=target_features,
             cluster_features=[],
         )
+        group_params.initialize()
         group_params.scaling_dict = scaling_dict
 
         stock_dataset = StockDataSet(group_params, self.ticker)

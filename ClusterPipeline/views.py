@@ -389,6 +389,7 @@ def forcast_detail(request, forcast_id):
 
     forcast.rebuild_data_frame()
     forcast_df = forcast.load_data_frame()
+    print(forcast_df.head())
     forcast_df_json = forcast_df.to_json(orient="split", date_format="iso")
 
     close_df = yf.download(
@@ -400,6 +401,8 @@ def forcast_detail(request, forcast_id):
 
     close_df = close_df[["Close"]].reset_index()
     close_df = close_df.rename(columns={"Close": "close"})
+    #change date to proper format
+    close_df['Date'] = close_df['Date'].dt.strftime('%Y-%m-%d')
 
     close_df_json = close_df.to_json(orient="split", date_format="iso")
 
