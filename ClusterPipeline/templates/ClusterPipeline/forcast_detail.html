@@ -445,15 +445,28 @@
                 console.log(`predictionStartDateStr: ${predictionStartDateStr} `);
 
 
-                const containerStatus = predDf.find(row => 
+                const row = predDf.find(row => 
                     String(row.model_id) === String(model_ids[index]) && String(row.start_date) === predictionStartDateStr
-                ).status
+                );
+                const keys = Object.keys(row);
+                console.log(typeof row);
+                const containerStatus = row.status; 
+                const predStartIndex = Object.keys(row).indexOf(predictionStartDateStr);
+                
+                const selectedKeys = keys.slice(predStartIndex, predStartIndex+6);
+                const predArr = selectedKeys.map(key => row[key]);
+
                 console.log(containerStatus);
                 if (containerStatus === 1 ) {
                     container.classList.add('green-background');
                 } else {
                     container.classList.add('red-background');
                 }
+                const arrString = predArr.toString();
+                const new_div = document.createElement('div');
+                new_div.innerHTML = arrString;
+                container.appendChild(new_div);
+        
 
                 // Add the event listener correctly
                 container.addEventListener('click', () => toggleContainer(container, model_ids[index], predictionStartDateStr));
@@ -606,7 +619,8 @@
         
         const dateStats = dateColumns.map(dateColumn => {
             const values = predDf.map(row => parseFloat(row[dateColumn])).filter(val => !isNaN(val));
-            const median = computeMedian(values);
+            // const median = computeMedian(values);
+            const median = calculateMean(values);
             const iqr = computeIQR(values);
             return { date: dateColumn, median, iqr };
         });
@@ -620,6 +634,12 @@
         return filteredDf;
     }
 
+    function calculateMean(arr) {
+        if (arr.length === 0) return 190;
+
+        const sum = arr.reduce((acc, val) => acc + val, 0);
+        return sum / arr.length;
+    }
 
     function computeMedian(arr)
     {
