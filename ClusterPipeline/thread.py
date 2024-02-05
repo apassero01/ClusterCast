@@ -7,6 +7,7 @@ import sys
 class CreateGroupBackground(threading.Thread):
     def __init__(self, group_params):
         self.group_params = group_params 
+        self.group_params.initialize()
         threading.Thread.__init__(self)
 
     def run(self):
@@ -23,7 +24,7 @@ class CreateGroupBackground(threading.Thread):
 
     def create_new_group(self):
         cluster_group = StockClusterGroup.objects.create(group_params = self.group_params)
-        cluster_group.generate_new_group(); 
+        cluster_group.generate_new_group()
 
 
 

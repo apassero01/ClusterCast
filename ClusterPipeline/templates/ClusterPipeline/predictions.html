@@ -1,0 +1,102 @@
+{% extends 'ClusterPipeline/base.html' %}
+{% load static %}
+
+{% block extrahead %}
+        <!-- Include any additional CSS or JS specific to cluster_group.html -->
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+    <style>
+        .prediction-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            height: auto
+        }
+
+        .graph-container {
+            flex: 1; /* Grow to available space */
+            min-height: 70%;
+            min-width: 100%;
+            height: auto; /* Height of the graph container */
+            position: relative; /* Set the position context for the plot */
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* prediction container label */
+        .prediction-container label {
+            font-size: .8em;
+            margin-bottom: 10px;
+        }
+
+        .form-container form {
+            padding-top: 5px;
+            display: flex; /* Set the form itself as a flex container */
+            justify-content: flex-start; /* Align children to the start */
+            align-items: center; /* Center children vertically */
+            width: 100%; /* Expand form to fill its container */
+        }
+
+        .input-group {
+            display: flex; /* Make the label and the input flex-items */
+            flex-direction: row; /* Stack the label and input vertically */
+            align-items: center; /* Center-align the items horizontally */
+            margin-right: 20px; /* Add space between the input groups */
+        }
+
+        .input-group label {
+            text-align: center; /* Center the text inside the label */
+            margin-bottom: 5px; /* Add some space below the label */
+        }
+
+        .input-group:last-child {
+            margin-right: 0; /* Remove margin for the last input group */
+        }
+
+        .input-group select,
+        .input-group input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 200px; /* Set a fixed width for inputs */
+            box-sizing: border-box; /* Border and padding are included in the width */
+        }
+
+
+    </style>
+    
+
+    </style>
+{% endblock extrahead %}
+
+{% block content %}
+    <!-- Include the cluster visualization template -->
+    <div class="prediction-container"> 
+        <div class="form-container">
+            <form method="get" action="{% url 'ClusterCast-forcast' %}">
+                <div class="input-group">
+                    <label for="ticker">Ticker:</label>
+                    <select id="ticker" name="ticker">
+                        {% for ticker in tickers %}
+                            <option value="{{ ticker }}">{{ ticker }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="interval">Interval:</label>
+                    <input type="text" id="interval" name="interval" value="1d">
+                </div>
+                <div class="input-group">
+                    <label for="start">Prediction Start:</label>
+                    <input type="date" id="start" name="start">
+                </div>
+                <div class="input-group">
+                    <label for="end">Prediction End:</label>
+                    <input type="date" id="end" name="end">
+                <button type="submit" id="loadDataButton" onclick="showLoader()">Predict</button>
+            </form>
+        </div>        
+    </div>
+
+{% endblock content %}

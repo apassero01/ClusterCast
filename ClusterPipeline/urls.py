@@ -21,6 +21,11 @@ urlpatterns = [
     path("", views.cluster_group, name="ClusterCast-home"),
     path("cluster-run/", views.cluster_run, name="ClusterCast-cluster-run"),
     path("cluster-group/", views.cluster_group, name="ClusterCast-cluster-group"),
-    path("Cluster-group/<int:id>/", views.cluster_group_detail, name="cluster_group_detail"),
-    path("cluster/<int:id>/", views.cluster_detail, name="cluster_detail"),
+    path("cluster-group/<int:id>/", views.cluster_group_detail, name="cluster_group_detail"),
+    path("cluster/<int:group_id>/<int:cluster_id>/", views.cluster_detail, name="cluster_detail"),
+    path("forcast/", views.forcast, name="ClusterCast-forcast"),
+    path("forcast/<int:forcast_id>/", views.forcast_detail, name="forcast_detail"),
+    path("predict/<int:prediction_id>/", views.prediction_detail, name="prediction_detail"),
+    path("get_prediction_vis_files/<int:prediction_id>/", views.get_prediction_vis_files, name="get_prediction_vis_files"),
+    path("get_models/<model_ids>/", views.get_models, name="get_models"),
 ]

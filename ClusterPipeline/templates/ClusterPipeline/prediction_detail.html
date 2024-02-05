@@ -1,0 +1,418 @@
+{% extends 'ClusterPipeline/base.html' %}
+{% load static %}
+
+{% block extrahead %}
+        <!-- Include any additional CSS or JS specific to cluster_group.html -->
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+    <style>
+        .dataframe-container {
+            flex: 1 0 auto;
+            overflow-x: auto; /* Allows scrolling if the table is wider than the container */
+            margin: 20px; /* Spacing around the container */
+            padding: 10px;
+            border: 1px solid #ddd; /* Light grey border */
+            background-color: #f9f9f9; /* Light grey background */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow for depth */
+            border-radius: 4px; /* Slightly rounded corners */
+            
+        }
+    
+        .dataframe-container table {
+            width: 100%; /* Full width of the container */
+            border-collapse: collapse; /* Removes double borders */
+        }
+    
+        .dataframe-container th,
+        .dataframe-container td {
+            border: 1px solid #ddd; /* Light grey border for cells */
+            padding: 8px; /* Spacing within cells */
+            text-align: left; /* Align text to the left */
+            font-size: 0.9em; /* Slightly smaller font size */
+        }
+    
+        .dataframe-container th {
+            background-color: #f1f1f1; /* Slightly darker background for headers */
+            font-weight: bold; /* Bold font for headers */
+        }
+    
+        .dataframe-container tr:nth-child(even) {
+            background-color: #ffffff; /* White background for even rows */
+        }
+    
+        .dataframe-container tr:nth-child(odd) {
+            background-color: #f9f9f9; /* Light grey background for odd rows */
+        }
+        .prediction-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            height: auto
+        }
+
+        .graph-container {
+            flex: 1; /* Grow to available space */
+            min-width: 100%;
+            height: auto; /* Height of the graph container */
+            position: relative; /* Set the position context for the plot */
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* prediction container label */
+        .prediction-container label {
+            font-size: .8em;
+            margin-bottom: 10px;
+        }
+
+        .slider-container {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .ticks-container {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            margin-top: -5px;
+        }
+
+        .tick-mark {
+            position: absolute;
+            font-size: 12px;
+        }
+
+        .tick-mark:first-child {
+            position: static;
+        }
+
+        .tick-mark:last-child {
+            position: absolute;
+            right: 0;
+        }
+
+        .slider-value {
+            position: absolute;
+            background-color: #fff;
+            padding: 2px 5px;
+            border-radius: 4px;
+            transform: translateX(-50%);
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        .form-container form {
+            padding-top: 5px;
+            display: flex; /* Set the form itself as a flex container */
+            justify-content: flex-start; /* Align children to the start */
+            align-items: center; /* Center children vertically */
+            width: 100%; /* Expand form to fill its container */
+        }
+
+        .input-group {
+            display: flex; /* Make the label and the input flex-items */
+            flex-direction: row; /* Stack the label and input vertically */
+            align-items: center; /* Center-align the items horizontally */
+            margin-right: 20px; /* Add space between the input groups */
+        }
+
+        .input-group label {
+            text-align: center; /* Center the text inside the label */
+            margin-bottom: 5px; /* Add some space below the label */
+        }
+
+        .input-group:last-child {
+            margin-right: 0; /* Remove margin for the last input group */
+        }
+
+        .input-group select,
+        .input-group input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 200px; /* Set a fixed width for inputs */
+            box-sizing: border-box; /* Border and padding are included in the width */
+        }
+
+
+    </style>
+    
+
+    </style>
+{% endblock extrahead %}
+
+{% block content %}
+    <!-- Include the cluster visualization template -->
+    <div class="prediction-container"> 
+        <div class="form-container">
+            <form method="get" action="{% url 'prediction_detail' prediction_id%}">
+                <div class="input-group">
+                    <label for="tickers">Ticker:</label>
+                    <select id="ticker" name="ticker">
+                        {% for tickerVal in tickers %}
+                            <option value="{{ tickerVal }}" {% if tickerVal == ticker %}selected{% endif %}>{{ tickerVal }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="interval">Interval:</label>
+                    <input type="text" id="interval" name="interval" value="{{ interval }}">
+                </div>
+                <div class="input-group">
+                    <label for="start">Prediction Start:</label>
+                    <input type="date" id="start" name="start" value="{{ prediction_start_date }}">
+                </div>
+                <div class="input-group">
+                    <label for="end">Prediction End:</label>
+                    <input type="date" id="end" name="end" value="{{ prediction_end_date }}">
+                <button type="submit" id="loadDataButton" onclick="showLoader()">Predict</button>
+            </form>
+        </div>          
+        
+        
+        <div class="slider-container">
+            <label for="accuracySlider">Model Accuracy</label>
+            <input type="range" id="accuracySlider" min="60" max="100" value="60" class="slider" oninput="updateSliderValue(this)">
+            <div id="accuracySliderValue" class="slider-value">60</div>
+            <div class="ticks-container">
+                <span class="tick-mark">60</span>
+                <span class="tick-mark" style="left: 50%;">80</span>
+                <span class="tick-mark" style="left: 100%;">100</span>
+            </div>
+        </div>
+        <div class="slider-container">
+            <label for="epochsSlider">Epochs</label>
+            <input type="range" id="epochsSlider" min="5" max="100" value="5" class="slider" oninput="updateSliderValue(this)">
+            <div id="epochsSliderValue" class="slider-value">5</div>
+            <div class="ticks-container">
+                <span class="tick-mark">5</span>
+                <span class="tick-mark" style="left: 50%;">52.5</span>
+                <span class="tick-mark" style="left: 100%;">100</span>
+            </div>
+        </div>
+    
+        <div class="graph-container">
+            <!-- Call the function inside DOMContentLoaded event listener -->
+            <script type="text/javascript">
+                document.addEventListener('DOMContentLoaded', function() {
+                    predDf = reconstructDataFrame(JSON.parse(`{{ pred_df|safe }}`));
+                    closeDf = reconstructDataFrame(JSON.parse(`{{ close_df|safe }}`));
+                    visualizeFuturePredictions(predDf, closeDf);
+                });
+            </script>
+        </div>
+        <div class="dataframe-container">
+            <!-- {{ dataframe_html|safe }} -->
+        </div>
+    </div>
+
+<!-- Define the renderPredictionGraph function before your content block -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+
+    var predDf;
+    var closeDf;
+
+    function updateSliderValue(slider) {
+        const valueDisplayId = slider.id + 'Value';
+        console.log(valueDisplayId)
+
+        const valueDisplay = document.getElementById(valueDisplayId);
+        valueDisplay.textContent = slider.value;
+
+        // Update position of the value display
+        const percent = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+        valueDisplay.style.left = `calc(${percent}% + (${8 - percent * 0.15}px))`; // Adjust the position
+        
+        // Update the graph
+        console.log(document.getElementById('accuracySliderValue').value)
+
+        visualizeFuturePredictions(predDf, closeDf, document.getElementById('accuracySlider').value, document.getElementById('epochsSlider').value);
+    }
+
+    function visualizeFuturePredictions(predDf, closeDfAll, modelAccuracy = 60, effectiveEpochs = 5) {
+        // Reconstruct the prediction DataFrame
+        closeDf = closeDfAll.slice(-20);
+
+        const filteredDf = filter_df_rows(predDf, modelAccuracy, effectiveEpochs);
+        let dataframe_container = document.querySelector('.dataframe-container');
+        dataframe_container.innerHTML = arrayToHtmlTable(filteredDf);
+
+        const predictionStats = processPredictionData(filteredDf);
+
+
+        const closingDates = closeDf.map(row => new Date(row.Date));
+        const closePrices = closeDf.map(row => row.close);
+
+        // Create trace for prediction dates
+        const predictionDates = predictionStats.map(stat => new Date(stat.date));
+        const medianPredictions = predictionStats.map(stat => stat.median);
+        const iq1Predictions = predictionStats.map(stat => stat.median - stat.iqr);
+        const iq3Predictions = predictionStats.map(stat => stat.median + stat.iqr);
+        const percentChange = predictionStats.map(stat => ((stat.median - closePrices.slice(-1)) / closePrices.slice(-1)) * 100);
+
+        const allDatesStr = combineAndSortDates(closingDates, predictionDates);
+        const formattedPredictionDates = predictionDates.map(date => date.toISOString().split('T')[0]);
+
+        const closingPricesTrace = {
+            x: closingDates.map(date => date.toISOString().split('T')[0]),
+            y: closePrices,
+            mode: 'lines+markers',
+            name: 'Closing Prices'
+        };
+        // console.log(medianPredictions)
+        // console.log(predictionDates)
+        const predictionDatesTrace = {
+            x: predictionDates.map(date => date.toISOString().split('T')[0]),
+            y: medianPredictions,
+            mode: 'lines+markers',
+            name: 'Median Predictions',
+            line: { color: 'red' }
+        };
+
+            // Create IQR traces
+        const iq1Trace = {
+            x: formattedPredictionDates,
+            y: iq1Predictions,
+            fill: 'none',
+            mode: 'lines',
+            line: { color: 'lightgreen' },
+            showlegend: false
+        };
+        console.log(iq1Predictions)
+
+        const iq3Trace = {
+            x: formattedPredictionDates,
+            y: iq3Predictions,
+            fill: 'tonexty',
+            mode: 'lines',
+            line: { color: 'lightgreen' },
+            name: 'Predictions IQR'
+        };
+
+        const annotations = predictionDates.map((date, i) => {
+            return {
+                x: formattedPredictionDates[i],
+                y: medianPredictions[i],
+                text: `${percentChange[i].toFixed(2)}%`,
+                xshift: 5,  // horizontal shift (in pixels)
+                yshift: 20, // vertical shift (in pixels)
+                showarrow: false,
+            };
+        });
+
+        // Plot using Plotly.js
+
+        const layout = {
+            title: 'Closing and Predicted Prices',
+            xaxis: {
+                title: 'Date',
+                type: 'category',  // Specify x-axis as categorical
+                tickvals: allDatesStr,
+                ticktext: allDatesStr,
+                tickangle: -45  // Optional: Adjust for better label visibility
+            },
+            yaxis: { title: 'Price' },
+            hovermode: 'x',
+            annotations: annotations  // Assuming annotations are already defined
+        };
+
+        const data = [closingPricesTrace, predictionDatesTrace,iq1Trace,iq3Trace]; // Add more traces as needed
+
+        let graphContainer = document.querySelector('.graph-container');
+        graphContainer.innerHTML = '';
+        Plotly.newPlot(graphContainer, data, layout);
+    }
+
+    // Function to process the prediction DataFrame
+    function processPredictionData(predDf) {
+        const dateRegex = /\d{4}-\d{2}-\d{2}/;
+        const dateColumns = Object.keys(predDf[0]).filter(key => dateRegex.test(key));
+        
+        const dateStats = dateColumns.map(dateColumn => {
+            const values = predDf.map(row => parseFloat(row[dateColumn])).filter(val => !isNaN(val));
+            const median = computeMedian(values);
+            const iqr = computeIQR(values);
+            return { date: dateColumn, median, iqr };
+        });
+
+        return dateStats;
+    }
+
+    function filter_df_rows(predDf, modelAccuracy, effectiveEpochs)
+    {
+        const filteredDf = predDf.filter(row => row.avg_accuracy >= modelAccuracy && row.effective_epochs >= effectiveEpochs);
+        return filteredDf;
+    }
+
+
+    function computeMedian(arr)
+    {
+        const sortedArr = arr.slice().sort((a, b) => a - b);
+        const mid = Math.floor(sortedArr.length / 2);
+        return sortedArr.length % 2 !== 0 ? sortedArr[mid] : (sortedArr[mid - 1] + sortedArr[mid]) / 2;
+    }
+
+    function computeIQR(arr) {
+        const sortedArr = arr.slice().sort((a, b) => a - b);
+        const q1 = computeMedian(sortedArr.slice(0, Math.floor(sortedArr.length / 2)));
+        const q3 = computeMedian(sortedArr.slice(Math.ceil(sortedArr.length / 2)));
+        return q3 - q1;
+    }   
+
+    function reconstructDataFrame(predDf) {
+        return predDf.data.map(row => {
+            const obj = {};
+            row.forEach((value, index) => {
+                obj[predDf.columns[index]] = value;
+            });
+            return obj;
+        });
+    }
+    function combineAndSortDates(closingDates, predictionDates) {
+        const allDates = new Set([
+            ...closingDates.map(date => date.toISOString().split('T')[0]),
+            ...predictionDates.map(date => date.toISOString().split('T')[0])
+        ]);
+
+        return Array.from(allDates).sort();
+    }
+    function arrayToHtmlTable(array) {
+        if (array.length === 0) {
+            return "<p>No data available.</p>";
+        }
+
+        let table = "<table>";
+
+        // Add header row
+        table += "<tr>";
+        table += "<th>Index</th>"; // Index column header
+        Object.keys(array[0]).forEach(header => {
+            table += `<th>${header}</th>`;
+        });
+        table += "</tr>";
+
+        // Add data rows
+        array.forEach((row, index) => {
+            table += "<tr>";
+            table += `<td>${index}</td>`; // Index column data
+            Object.values(row).forEach(cell => {
+                table += `<td>${cell}</td>`;
+            });
+            table += "</tr>";
+        });
+
+        table += "</table>";
+        return table;
+    }
+</script>
+{% endblock content %}
+
+

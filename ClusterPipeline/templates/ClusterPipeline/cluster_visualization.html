@@ -25,50 +25,52 @@ function renderVisualization(data) {
         dataVisualizationContainer.innerHTML = '';
 
         // Iterate over each data result pair
-        data.forEach((pair,index) => {
-            const [fig, metrics] = pair;
+        data.forEach((dict,index) => {
+            const {figs, metrics, model_config, model_stats} = dict;
 
-            // unpack tuple of figs to fig1 fig3
-            const [fig1, fig2] = fig;
             // Create the container for the graph-text pair
             let pairContainer = document.createElement('div');
             pairContainer.classList.add('graph-text-pair-container');
-            // Append the pair container to the 'data-visualization' container
-            dataVisualizationContainer.appendChild(pairContainer);
-
-            // Create the container for the graph
-            let graphContainer = document.createElement('div');
-            graphContainer.classList.add('graph-container');
-
-            // Append the graph container to the pair container
-            pairContainer.appendChild(graphContainer);
-
-            // Render the figure using Plotly
-            Plotly.newPlot(graphContainer, fig1.data, fig1.layout, {responsive: true});
-
-            // Create the container for the text
-            // let textContainer = document.createElement('div');
-            // textContainer.classList.add('text-data-container');
-            // pairContainer.appendChild(textContainer);
-
-            // // Create a paragraph for the metrics and append to text container
-            // let p = document.createElement('p');
-            // p.textContent = metrics;
-            // textContainer.appendChild(p);
-            graphContainer = document.createElement('div');
-            graphContainer.classList.add('graph-container');
-
-            pairContainer.addEventListener('click',function() {
-                window.location.href = `/cluster/${index}/`;
-            })
             
+            graphStatsContainer = document.createElement('div');
+            graphStatsContainer.classList.add('graph-stats-container');
 
-            // Append the graph container to the pair container
-            pairContainer.appendChild(graphContainer);
+            
+            
+            console.log(model_stats)
+            if (Object.keys(model_stats).length > 0) {
+                const epochs = model_stats.effective_epochs;
+                const error = model_stats.error;
 
-            Plotly.newPlot(graphContainer, fig2.data, fig2.layout, {responsive: true});
-            // text();
-            populateTextDataContainer(metrics,pairContainer);
+                // add epochs and error text to top of pair container
+                let epochsErrorContainer = document.createElement('div');
+                epochsErrorContainer.classList.add('epochs-error-container');
+                let epochsError = document.createElement('p');
+                epochsError.innerHTML = `Epochs: ${epochs} | Error: ${error}`;
+                epochsError.classList.add('epochs-error');
+                epochsErrorContainer.appendChild(epochsError);
+                
+                graphStatsContainer.appendChild(epochsErrorContainer);
+ 
+            }
+
+            graphStatsContainer.appendChild(pairContainer);
+            dataVisualizationContainer.appendChild(graphStatsContainer);
+
+
+            figs.forEach(fig => {
+                // Create the container for the graph
+                let graphContainer = document.createElement('div');
+                graphContainer.classList.add('graph-container');
+
+                // Append the graph container to the pair container
+                pairContainer.appendChild(graphContainer);
+
+                // Render the figure using Plotly
+                Plotly.newPlot(graphContainer, fig.data, fig.layout, {responsive: true});
+            
+            });
+            populateTextDataContainer(metrics,model_config,pairContainer,index);
         });
     } else {
         console.error('data-visualization container not found');
@@ -79,7 +81,7 @@ function text(){
 }
 
 
-function populateTextDataContainer(results,pairContainer) {
+function populateTextDataContainer(results,model_config,pairContainer,index) {
     let textContainer = document.createElement('div');
     textContainer.classList.add('text-data-container');
 
@@ -98,6 +100,32 @@ function populateTextDataContainer(results,pairContainer) {
         textContainer.appendChild(stepData);
     });
 
+    if (model_config) {
+        let modelSummaryContainer = document.createElement('div');
+        modelSummaryContainer.classList.add('model-summary-container');
+
+        let modelSummary = document.createElement('pre');
+        modelSummary.textContent = model_config.summary_string;
+        modelSummary.classList.add('model-summary');
+        modelSummaryContainer.appendChild(modelSummary);
+
+        textContainer.appendChild(modelSummaryContainer);
+
+        // Create a container for the model features
+        let modelFeaturesContainer = document.createElement('div');
+        modelFeaturesContainer.classList.add('model-features-container');
+
+        let modelFeatures = document.createElement('p');
+        // Assuming model_features is an array, join it into a string
+        modelFeatures.textContent = model_config.model_features.join(', ');
+        modelFeatures.classList.add('model-features');
+        modelFeaturesContainer.appendChild(modelFeatures);
+
+        // Append the features container to the pairContainer
+        pairContainer.appendChild(modelFeaturesContainer);
+    }
+
+    // Continue appending other elements as needed
     pairContainer.appendChild(textContainer);
 }
 
