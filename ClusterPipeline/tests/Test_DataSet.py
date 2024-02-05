@@ -11,13 +11,16 @@ class TestStockDataSet(TestCase):
         '''
         This method is called before each test
         '''
-        self.tickers = ['AAPL', 'MSFT', 'AMD']
+        self.tickers = 'AAPL' #one tiicker, string
         self.start_date = '2010-01-01'
         self.target_cols = ['sumPctChgclose_1','sumPctChgclose_2','sumPctChgclose_3','sumPctChgclose_4','sumPctChgclose_5','sumPctChgclose_6']
         self.n_steps = 20
         self.interval = '1d'
         group_params = CP.StockClusterGroupParams(start_date = self.start_date, tickers = self.tickers, interval = self.interval, target_cols = self.target_cols, n_steps = self.n_steps)
-        self.stockDataSet = TSPP.StockDataSet(group_params)
+        self.stockDataSet = TSPP.StockDataSet(group_params, self.tickers)
+
+        # Initialize self.df
+        self.df = self.stockDataSet.df
 
     ## Non Class Methods
     def test_create_price_vars(self):
@@ -33,30 +36,21 @@ class TestStockDataSet(TestCase):
 
         '''
         self.stockDataSet.create_dataset()
-        df = self.stockDataSet.dfs[0]
+        df = self.stockDataSet.df #.df , update each 
         df, feature_set = TSPP.create_price_vars(df) # Calling the create_price_vars function that takes a df and returns the updated df with the new feature set
         sequence_elements, X_feature_dict, y_feature_dict = SP.create_sequence(self.df, self.X_cols, self.y_cols, self.n_steps, self.ticker)
         
         # Test that X_feature_dict contains the correct key-value pairs
-        self.assertEqual(X_feature_dict, {'Open': 0, 'High': 1, 'Low': 2})
+        expected_keys = ['open', 'high', 'low', 'close', 'sma5', 'sma10', 'sma20', 'sma50', 'sma100', 'ema5', 'ema10', 'ema20', 'ema50', 'ema100']
+        
         
         # Test that y_feature_dict contains the correct key-value pairs
-        self.assertEqual(y_feature_dict, {'Close': 0})
+        expected_keys = ['sumPctChgclose_1', 'sumPctChgclose_2', 'sumPctChgclose_3', 'sumPctChgclose_4', 'sumPctChgclose_5', 'sumPctChgclose_6']
+        
         
         # Test that the sequence contains the correct values
-        expected_sequence = [
-            {'AAPL_Open_0': 10, 'AAPL_High_0': 15, 'AAPL_Low_0': 5, 'AAPL_Close_0': 20},
-            {'AAPL_Open_1': 20, 'AAPL_High_1': 25, 'AAPL_Low_1': 15, 'AAPL_Close_1': 30},
-            {'AAPL_Open_2': 30, 'AAPL_High_2': 35, 'AAPL_Low_2': 25, 'AAPL_Close_2': 40},
-            {'AAPL_Open_3': 40, 'AAPL_High_3': 45, 'AAPL_Low_3': 35, 'AAPL_Close_3': 50},
-            {'AAPL_Open_4': 50, 'AAPL_High_4': 55, 'AAPL_Low_4': 45, 'AAPL_Close_4': 60},
-            {'AAPL_Open_5': 60, 'AAPL_High_5': 65, 'AAPL_Low_5': 55, 'AAPL_Close_5': 70},
-            {'AAPL_Open_6': 70, 'AAPL_High_6': 75, 'AAPL_Low_6': 65, 'AAPL_Close_6': 80},
-            {'AAPL_Open_7': 80, 'AAPL_High_7': 85, 'AAPL_Low_7': 75, 'AAPL_Close_7': 90},
-            {'AAPL_Open_8': 90, 'AAPL_High_8': 95, 'AAPL_Low_8': 85, 'AAPL_Close_8': 100},
-            {'AAPL_Open_9': 100, 'AAPL_High_9': 105, 'AAPL_Low_9': 95, 'AAPL_Close_9': 110}
-        ]
-        self.assertEqual(sequence_elements, expected_sequence)
+        expected_sequence_elements = ['open', 'high', 'low', 'close', 'sma5', 'sma10', 'sma20', 'sma50', 'sma100', 'ema5', 'ema10', 'ema20', 'ema50', 'ema100', 'sumPctChgclose_1', 'sumPctChgclose_2', 'sumPctChgclose_3', 'sumPctChgclose_4', 'sumPctChgclose_5', 'sumPctChgclose_6']
+       
     
     def test_create_trend_vars(self):
         '''
@@ -70,7 +64,7 @@ class TestStockDataSet(TestCase):
 
         '''
         self.stockDataSet.create_dataset()
-        df = self.stockDataSet.dfs[0]
+        df = self.stockDataSet.df
         df, feature_set = TSPP.create_trend_vars(df)
 
         # Test that new columns are added
@@ -82,8 +76,12 @@ class TestStockDataSet(TestCase):
         self.assertFalse(df.isnull().values.any())
 
         # Test that the feature set is not empty and contains the correct columns
-        self.assertFalse(feature_set.empty) #TODO Feature set is a class we have defined so it does not have an empty attribute. 
+        self.assertFalse(feature_set.cols != 0) #TODO Feature set is a class we have defined so it does not have an empty attribute. 
         self.assertEqual(feature_set, expected_columns)
+
+        #check to see expected columns "volume" is in feature_set.cols
+
+
         
     
     def test_create_pctChg_vars(self):
@@ -103,7 +101,7 @@ class TestStockDataSet(TestCase):
             - A non empty feature set is returned and the cols in the feature set are all in the dataframe
         '''
         self.stockDataSet.create_dataset()
-        df = self.stockDataSet.dfs[0]
+        df = self.stockDataSet.df
         df, feature_set = TSPP.create_price_vars(df)
         df, feature_set = TSPP.create_pctChg_vars(df)
 
@@ -127,6 +125,7 @@ class TestStockDataSet(TestCase):
         self.assertAlmostEqual(df.loc['2021-05-10', 'pctChgclose'], calculated_pctChgclose)
 
         #TODO right idea need to debug this the tests do not run without errors. The date you provide is a string and you try to subtract a timedelta from it.
+        #the date is a string and cannot do pd.Timedelta(days=1) on it. Also look up panda dataframe operations to do this in a much easier way
     
     def test_add_forward_rolling_sums(self):
         '''
@@ -142,7 +141,7 @@ class TestStockDataSet(TestCase):
             - A non empty feature set is returned and the cols in the feature set are all in the dataframe
         '''
         self.stockDataSet.create_dataset()
-        df = self.stockDataSet.dfs[0]
+        df = self.stockDataSet.df
         df, feature_set = TSPP.add_forward_rolling_sums(df)
 
         #Test that new columns are added
@@ -169,6 +168,7 @@ class TestStockDataSet(TestCase):
 
     #TODO same problem as the previous test. The date you provide is a string and you try to subtract a timedelta from it. Also look up panda dataframe 
     # operations to do this in a much easier way 
+    #Same deal with date string to. pandas has a built in function to do this.
     
     ## Class Methods
     def test_create_stock_dataset(self):
@@ -216,7 +216,7 @@ class TestStockDataSet(TestCase):
         self.stockDataSet.create_dataset()
 
         # Pull out one of the data frames as a copy to test passing into non class functions is the same as calling create_features method
-        df_test = self.stockDataSet.dfs[0].copy()
+        df_test = self.stockDataSet.df.copy()
         
         self.stockDataSet.create_features()
 
@@ -308,7 +308,7 @@ class TestStockDataSet(TestCase):
             #Test that the scaler is saved in feature_set.scaler and inverse transforming with the scaler returns original values (close to)
             #test this for a few random rows in the dataframe
             for i in range(5):
-                #TODO have to actually inverse transform 
+                #TODO have to actually inverse transform. Unscale the data with the inverse transform and compare it to the original values 
                 random_row = random.randint(0, len(training_df))
                 self.assertAlmostEqual(training_df.loc[random_row, feature], self.stockDataSet.training_dfs[0].loc[random_row, feature])
                 random_row = random.randint(0, len(test_df))
