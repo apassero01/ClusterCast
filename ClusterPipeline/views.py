@@ -134,12 +134,21 @@ def cluster_group_detail(request, id):
     cluster_results = []
 
     for cluster in cluster_group.clusters:
-        if len(cluster.models) == 0:
-            continue
         fig1 = cluster.visualize_cluster_2d()
+        fig1_json = json.loads(plotly.io.to_json(fig1))
+
+        if len(cluster.models) == 0:
+            cluster_dict = {}
+            cluster_dict["figs"] = (fig1_json,)
+            cluster_dict["metrics"] = None
+            cluster_dict["model_config"] = None
+            cluster_dict["model_stats"] = None
+            cluster_dict["cluster_id"] = cluster.pk
+            cluster_results.append(cluster_dict)
+            continue
+
         sorted_models = cluster.sort_models()
         fig2 = sorted_models[0].visualize_future_distribution()
-        fig1_json = json.loads(plotly.io.to_json(fig1))
         fig2_json = json.loads(plotly.io.to_json(fig2))
 
         best_model = sorted_models[0]
@@ -151,6 +160,7 @@ def cluster_group_detail(request, id):
         cluster_dict["metrics"] = metrics
         cluster_dict["model_config"] = model_config
         cluster_dict["model_stats"] = best_model.model_metrics
+        cluster_dict["cluster_id"] = cluster.pk
 
         cluster_results.append(cluster_dict)
 
@@ -170,7 +180,10 @@ def cluster_group_detail(request, id):
 @csrf_exempt
 def cluster_detail(request, group_id, cluster_id):
     cluster_group = get_cluster_group(group_id)
-    cluster = cluster_group.clusters[cluster_id]
+
+    for cluster in cluster_group.clusters:
+        if cluster.pk == cluster_id:
+            break
 
     model_results = []
 
@@ -203,6 +216,18 @@ def cluster_detail(request, group_id, cluster_id):
     return render(
         request, "ClusterPipeline/cluster_detail.html", {"results": model_results}
     )
+
+@csrf_exempt
+def train_new_models(request, group_id, cluster_id):
+    cluster_group = get_cluster_group(group_id)
+
+    for cluster in cluster_group.clusters:
+        if cluster.pk == cluster_id:
+            break
+    print(cluster_group.group_params.strong_predictors)
+    cluster_group.train_single_cluster(cluster)
+
+    return JsonResponse({"success": True})
 
 
 @csrf_exempt
@@ -355,7 +380,9 @@ def forcast_detail(request, forcast_id):
 
         forcast = Pred.StockForcastTimeline.objects.get(pk=forcast_id)
         forcast.initialize()
-        forcast.load_data_frame()
+        dates, model_prediction_output = forcast.create_prediction_output()
+        print(dates)
+        print(model_prediction_output)
         df = forcast.forcast_dataframe
         df["status"] = status_arr
         for prediction in forcast.stock_predictions: 
@@ -386,6 +413,10 @@ def forcast_detail(request, forcast_id):
     prediction.create_general_data_set(
         start_date=start_date, end_date=date.today().strftime("%Y-%m-%d")
     )
+
+    dates, model_prediction_output = forcast.create_prediction_output()
+    print(dates)
+    print(model_prediction_output)
 
     forcast.rebuild_data_frame()
     forcast_df = forcast.load_data_frame()

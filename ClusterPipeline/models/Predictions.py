@@ -7,7 +7,7 @@ from tensorflow.keras.backend import clear_session
 from pandas.tseries.holiday import USFederalHolidayCalendar
 from pandas.tseries.offsets import CustomBusinessDay
 from django.core.files.base import ContentFile
-from .RNNModels import RNNModel, StepResult
+from .RNNModels import RNNModel, StepResult, ModelPrediction
 from collections import defaultdict
 import tensorflow as tf
 from datetime import date
@@ -29,7 +29,7 @@ def prediction_directory_path(instance, filename):
     Returns the path of the directory where the file will be saved.
     Function is passed as a parameter when declaring FileField in model.
     """
-    date_str = instance.prediction_start_date.strftime("%Y-%m-%d")
+    date_str = instance.prediction_start_date.strftime("%Y-%m-%d %H:%M:%S")
     return os.path.join(
         "predictions", f"{instance.ticker}-{instance.interval}-{date_str}", filename
     )
@@ -68,6 +68,8 @@ class StockPrediction(Prediction):
         "StockForcastTimeline", on_delete=models.CASCADE, blank=True, null=True
     )
     dir_path = models.CharField(max_length=100, blank=True, null=True)
+    final_prediction_date = models.DateField(blank=True, null=True)
+    cluster_group_params = models.JSONField(default=list, blank=True, null=True)
 
     def initialize(self):
         """
@@ -80,7 +82,7 @@ class StockPrediction(Prediction):
         self.dir_path = os.path.join(
             "media",
             "predictions",
-            f'{self.ticker}-{self.interval}-{self.prediction_start_date.strftime("%Y-%m-%d")}',
+            f'{self.ticker}-{self.interval}-{self.prediction_start_date.strftime("%Y-%m-%d %H:%M:%S")}',
         )
 
     def predict_all_groups(
@@ -107,7 +109,7 @@ class StockPrediction(Prediction):
         print([group_params.id for group_params in all_group_params])
         all_groups = [
             StockClusterGroup.objects.get(group_params=group_params)
-            for group_params in all_group_params
+            for group_params in all_group_params if group_params.id not in self.cluster_group_params
         ]
         all_rnn_predictions = [] 
         for cluster_group in all_groups:
@@ -125,7 +127,12 @@ class StockPrediction(Prediction):
                 individual_model_accuracy_thresh,
                 epochs_threshold,
             )
-            all_rnn_predictions.append(all_rnn_predictions)
+            all_rnn_predictions.append(rnn_predictions)
+            self.cluster_group_params.append(cluster_group.group_params.id)
+
+            for rnn_prediction in rnn_predictions:
+                if self.final_prediction_date is None or rnn_prediction.end_date > self.final_prediction_date:
+                    self.final_prediction_date = rnn_prediction.end_date
 
         return all_rnn_predictions
 
@@ -253,7 +260,7 @@ class StockPrediction(Prediction):
 
                 print("Daily Accuracy")
                 print(daily_accuracy)
-                formatted_dates = [date.strftime("%Y-%m-%d") for date in future_dates]
+                formatted_dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in future_dates]
                 
                 rnn_prediction = model.create_prediction(price_predictions, formatted_dates, self, end_day_close)
                 rnn_predictions.append(rnn_prediction)
@@ -599,6 +606,19 @@ class StockPrediction(Prediction):
         concat_df_sorted = concat_df[final_columns_order]
 
         return concat_df_sorted
+    
+    def create_prediction_output(self): 
+        self.model_predictions = list(ModelPrediction.objects.filter(stock_prediction=self))
+
+        dates = pd.date_range(self.prediction_start_date, self.final_prediction_date, freq=self.market_calendar).tolist()
+
+        model_prediction_output = [] 
+        for model_prediction in self.model_predictions:
+            model_prediction_output.append(model_prediction.create_model_pred_dict())
+
+        return dates, model_prediction_output
+
+
 
     def visualize_current_and_cluster(self, cluster, X_cluster, cluster_features):
         # Create a subplot with 1 row and 2 columns
@@ -719,6 +739,7 @@ class StockForcastTimeline(ForcastTimeline):
     interval = models.CharField(max_length=10)
     prediction_start_date = models.DateField()
     prediction_end_date = models.DateField()
+    final_prediction_date = models.DateField(blank=True, null=True)
     df_file = models.FileField(
         upload_to=forcast_timeline_directory_path, blank=True, null=True
     )
@@ -753,6 +774,7 @@ class StockForcastTimeline(ForcastTimeline):
 
             self.prediction_end_date = self.prediction_dates[-1]
             self.prediction_start_date = self.prediction_dates[0]
+            self.final_prediction_date = self.stock_predictions[-1].final_prediction_date
         else:
             self.prediction_dates = []
 
@@ -799,15 +821,13 @@ class StockForcastTimeline(ForcastTimeline):
             self.stock_predictions.append(stock_prediction)
             current_predictions.append(stock_prediction)
 
-        self.forcast_dataframe = self.create_pred_df(current_predictions)
-        self.save_data_frame(self.forcast_dataframe)
-
         # sort date list and prediction list
         self.prediction_dates, self.stock_predictions = zip(
             *sorted(zip(self.prediction_dates, self.stock_predictions))
         )
         self.prediction_start_date = self.prediction_dates[0]
         self.prediction_end_date = self.prediction_dates[-1]
+        self.final_prediction_date = self.stock_predictions[-1].final_prediction_date
 
     def create_pred_df(self, predictions):
         """
@@ -851,6 +871,21 @@ class StockForcastTimeline(ForcastTimeline):
         concat_df_sorted = concat_df[final_columns_order]
 
         return concat_df_sorted
+    
+    def create_prediction_output(self):
+        if len(self.stock_predictions) == 0 or self.final_prediction_date is None:
+            return [], []
+        
+        model_predictions_output = []
+        
+        print(self.market_calendar)
+        dates = pd.date_range(start = self.prediction_start_date, end = self.final_prediction_date, freq=self.market_calendar).tolist()
+        for stock_prediction in self.stock_predictions:
+            cur_dates, model_prediction_output = stock_prediction.create_prediction_output()
+            model_predictions_output.append(model_prediction_output)
+        
+        return dates, model_predictions_output
+        
 
     def rebuild_data_frame(self):
         new_df = self.create_pred_df(self.stock_predictions)

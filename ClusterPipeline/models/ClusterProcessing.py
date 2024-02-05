@@ -137,6 +137,7 @@ class StockClusterGroupParams(ClusterGroupParams):
     interval = models.CharField(max_length=10)
     cluster_features = models.JSONField(default=list,blank=True)
     training_features = models.JSONField(default=list,blank=True)
+    model_params = models.JSONField(default=list,blank=True)
 
     def initialize(self):
         super().initialize()
@@ -383,6 +384,18 @@ class StockClusterGroup(ClusterGroup):
             cluster.hard_filter_models()
 
         self.group_params.save() 
+    
+    def train_single_cluster(self, cluster):
+        '''
+        Method to train an RNN for a single cluster. This method is used for fine tuning on the individual clusters. 
+        '''
+        model_features = self.group_params.training_features
+        cluster.group_params = self.group_params
+        cluster.train_rnn(model_features, None ,5)
+        cluster.save()
+        cluster.hard_filter_models(accuracy_threshold = 30, epoch_threshold = 1)
+
+        self.group_params.save()
 
     
     def train_general_model(self,model_features):
@@ -440,7 +453,7 @@ class StockClusterGroup(ClusterGroup):
         Method to load a saved group from the database. We perform the preprocessing steps that are necessary and avoid the ones that are not
         '''
         self.group_params.initialize()
-        self.create_data_set(to_train = False)
+        self.create_data_set()
         self.create_sequence_set()
         self.load_saved_clusters()
 
@@ -617,7 +630,7 @@ class StockCluster(Cluster):
         return fig
 
     
-    def train_rnn(self,model_features,general_model = None, num_feauture_iterations = 30):
+    def train_rnn(self,model_features,general_model = None, num_feauture_iterations = 30, sample_size = 5):
         if len(self.X_train) == 0 or len(self.X_test) == 0:
             return
         
@@ -627,7 +640,7 @@ class StockCluster(Cluster):
         self.models = [] 
 
         for i in range(num_feauture_iterations):
-            features = self.random_sample_features(self.cluster_group.group_params.feature_sample_size, model_features,self.cluster_group.group_params.strong_predictors)
+            features = self.random_sample_features(sample_size, model_features,self.group_params.strong_predictors)
             X_train_filtered = self.cluster_group.filter_by_features(self.X_train, features, self.X_feature_dict)
             X_test_filtered = self.cluster_group.filter_by_features(self.X_test, features, self.X_feature_dict)
 

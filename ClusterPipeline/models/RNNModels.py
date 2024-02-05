@@ -528,9 +528,30 @@ class ModelPrediction(models.Model):
     filtered_accuracy = models.FloatField(default=0)
     prev_day_price = models.FloatField(default=0)
     effective_epochs = models.IntegerField(default=0)
+    start_date = models.DateTimeField(default=None, blank=True, null=True)
+    end_date = models.DateTimeField(default=None, blank=True, null=True)
 
     def initialize(self):
         self.cluster_id = self.rnn_model.cluster.pk
         self.group_id = self.rnn_model.cluster.group.pk
         self.filtered_accuracy = self.predicted_values.mean()
         self.epochs = self.rnn_model.model_metrics["effective_epochs"]
+        self.start_date = self.prediction_dates[0]
+        self.end_date = self.prediction_dates[-1]
+    
+    def create_model_pred_dict(self):
+        model_dict = {
+            "model_id": self.rnn_model.pk,
+            "stock_prediction_id": self.stock_prediction.pk,
+            "group_id": self.group_id,
+            "cluster_id": self.cluster_id,
+            "filtered_accuracy": self.filtered_accuracy,
+            "effective_epochs": self.effective_epochs,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "predicted_values": self.predicted_values,
+            "prev_day_price": self.prev_day_price,
+            "status": self.status,
+
+        }
+        return model_dict
