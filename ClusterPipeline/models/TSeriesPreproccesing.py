@@ -32,6 +32,9 @@ class FeatureSet:
         self.ticker = ticker
         self.percentiles = percentiles
 
+    def __repr__(self) -> str:
+        return self.name
+
 
 
 class DataSet:
@@ -177,14 +180,12 @@ class StockDataSet(DataSet):
         if self.created_features:
             return
         
-        X_feature_sets = []
         X_cols = set() 
 
         # Create price features
         self.df, feature_sets = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'], cluster_features = self.group_params.cluster_features, ticker = self.ticker)
-
-        self.X_feature_sets += feature_sets
         for feature_set in feature_sets:
+            self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
         #todo clean this up
         if 'bb_close' in X_cols:
@@ -211,7 +212,6 @@ class StockDataSet(DataSet):
         
 
         # Update the group params with the new  columns
-        self.group_params.X_feature_sets.append(self.X_feature_sets)
         self.group_params.X_cols.update(X_cols)
 
         self.created_features = True

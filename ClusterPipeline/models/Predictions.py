@@ -412,6 +412,7 @@ class StockPrediction(Prediction):
             cluster_features=[],
         )
         group_params.scaling_dict = scaling_dict
+        group_params.initialize()
 
         stock_dataset = StockDataSet(group_params, self.ticker)
 

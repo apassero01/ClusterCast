@@ -659,10 +659,10 @@
         const dateStats = dateColumns.map(dateColumn => {
             const values = predDf.map(row => parseFloat(row[dateColumn])).filter(val => !isNaN(val));
             // const median = computeMedian(values);
-            // const median = computeMedian(values);
-            const median = calculateMean(values);
+            const median = computeMedian(values);
+            // const median = calculateMean(values);
             const iqr = computeIQR(values);
-            return { date: dateColumn, median, iqr };
+            return { date: dateColumn, median, iqr };z
         });
 
         return dateStats;
