@@ -31,7 +31,7 @@
         .form-container form {
             display: flex;
             flex-direction: row; /* Align form children horizontally */
-            width: 75%; /* Expand form to fill its container */
+            width: 100%; /* Expand form to fill its container */
             justify-content: space-between; /* Distribute children evenly */
             align-items: center; /* Center children vertically */
             flex-wrap: wrap; /* Allow form items to wrap on smaller screens */
@@ -65,6 +65,7 @@
         .load-data-button-container
         {
             display: flex;
+
             flex-direction: column;
             align-items: center;
             justify-content: center;
@@ -272,6 +273,14 @@
                 </div>
                 <button type="submit" class="loadDataButton" onclick="showLoader()">Predict</button>
                 <button type="button" class="loadDataButton" onclick="updatePredictions()">Save Prediction</button>
+                <button type="button" class="shuffle" >Shuffle Models</button>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                      var loadDataButton = document.querySelector('.shuffle');
+                      loadDataButton.classList.add('loadDataButton');
+                      loadDataButton.addEventListener('click', shuffleModels);
+                    });
+                  </script>
 
             </form>
         </div>          
@@ -444,6 +453,13 @@
                 console.log(`model_ids[index]: ${model_ids[index]} `);
                 console.log(`predictionStartDateStr: ${predictionStartDateStr} `);
 
+                const close_idx = closeDf.findIndex(row => 
+                    String(row.Date) === String(predictionStartDateStr)
+                );
+                console.log(`close_idx: ${close_idx} `);    
+                const close_price = closeDf[close_idx-1].close;
+
+                console.log(`close_price: ${close_price} `);
 
                 const row = predDf.find(row => 
                     String(row.model_id) === String(model_ids[index]) && String(row.start_date) === predictionStartDateStr
@@ -456,16 +472,39 @@
                 const selectedKeys = keys.slice(predStartIndex, predStartIndex+6);
                 const predArr = selectedKeys.map(key => row[key]);
 
+                const cum_pct_chg = [];
+                predArr.forEach((val, index) => {
+                    if (val == null) {  // Corrected the if condition syntax and NaN check
+                        cum_pct_chg.push(0);
+                    } else {
+                        cum_pct_chg.push(((val - close_price) / close_price * 100).toFixed(2));
+                    }
+                });
+                
+                console.log("Testing pred Arr Vals")
+                console.log(predArr);
+                console.log(close_price);
+                console.log(cum_pct_chg);
+
                 console.log(containerStatus);
                 if (containerStatus === 1 ) {
                     container.classList.add('green-background');
                 } else {
                     container.classList.add('red-background');
                 }
-                const arrString = predArr.toString();
+                const arrString = cum_pct_chg.toString();
                 const new_div = document.createElement('div');
                 new_div.innerHTML = arrString;
                 container.appendChild(new_div);
+
+                // Adding CSS to center the text horizontally
+                new_div.style.textAlign = 'center';
+
+                // If you also want to center the text vertically, you can use the following:
+                new_div.style.display = 'flex';
+                new_div.style.justifyContent = 'center';
+                new_div.style.alignItems = 'center';
+                // If the div doesn't have a specified 
         
 
                 // Add the event listener correctly
@@ -620,9 +659,10 @@
         const dateStats = dateColumns.map(dateColumn => {
             const values = predDf.map(row => parseFloat(row[dateColumn])).filter(val => !isNaN(val));
             // const median = computeMedian(values);
-            const median = calculateMean(values);
+            const median = computeMedian(values);
+            // const median = calculateMean(values);
             const iqr = computeIQR(values);
-            return { date: dateColumn, median, iqr };
+            return { date: dateColumn, median, iqr };z
         });
 
         return dateStats;
@@ -635,14 +675,16 @@
     }
 
     function calculateMean(arr) {
-        if (arr.length === 0) return 190;
-
+        console.log("Testing Mean")
+        console.log(arr);
         const sum = arr.reduce((acc, val) => acc + val, 0);
         return sum / arr.length;
     }
 
     function computeMedian(arr)
     {
+        console.log("Testing Median")
+        console.log(arr);
         const sortedArr = arr.slice().sort((a, b) => a - b);
         const mid = Math.floor(sortedArr.length / 2);
         return sortedArr.length % 2 !== 0 ? sortedArr[mid] : (sortedArr[mid - 1] + sortedArr[mid]) / 2;
@@ -809,6 +851,24 @@
             console.error('Error:', error);
             // Handle errors
         });
+    }
+
+    function shuffleModels()
+    {   
+        const switchProbability = 0.05;
+        predDf.forEach(row => {
+            row.status = 0; 
+        });
+        predDf.forEach(row => {
+        // 20% chance to make the switch
+        if (Math.random() < switchProbability && row.status !== 1) {
+            // Perform the switch/action only 20% of the time
+            row.status = 1;
+        }
+        // else, do nothing, or you can add any other logic as needed
+        });
+        visualizeFuturePredictions(predDf, closeDf);
+
     }
 
 </script>

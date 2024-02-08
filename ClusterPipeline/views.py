@@ -29,7 +29,7 @@ def home(request):
 @csrf_exempt
 @transaction.atomic
 def cluster_run(request):
-    supported_params = CP.SupportedParams.objects.get(pk=1)
+    supported_params = CP.SupportedParams.objects.get(pk=20)
     cluster_features_list = supported_params.features
     context = {"cluster_features_list": cluster_features_list}
 
@@ -432,7 +432,6 @@ def forcast_detail(request, forcast_id):
 
     close_df = close_df[["Close"]].reset_index()
     close_df = close_df.rename(columns={"Close": "close"})
-    #change date to proper format
     close_df['Date'] = close_df['Date'].dt.strftime('%Y-%m-%d')
 
     close_df_json = close_df.to_json(orient="split", date_format="iso")

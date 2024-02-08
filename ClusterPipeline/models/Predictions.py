@@ -390,6 +390,7 @@ class StockPrediction(Prediction):
         )
         group_params.initialize()
         group_params.scaling_dict = scaling_dict
+        group_params.initialize()
 
         stock_dataset = StockDataSet(group_params, self.ticker)
 

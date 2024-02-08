@@ -236,7 +236,7 @@ class StockClusterGroup(ClusterGroup):
             self.data_set = StockDataSet(self.group_params, ticker)
             self.data_set.preprocess_pipeline(to_train=to_train)
             self.data_sets.append(self.data_set)
-            self.group_params = self.data_set.group_params
+        self.group_params = self.data_sets[0].group_params
         
         self.group_params.data_sets = self.data_sets
 

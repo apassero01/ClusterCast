@@ -248,18 +248,18 @@ class StockSequenceSet(SequenceSet):
             raise ValueError("Sequence elements have not been created")
 
         if add_cuma_pctChg_features:
-            self.create_cuma_pctChg_features()
+            X_feauture_sets, X_feature_dict = self.create_cuma_pctChg_features()
+            self.group_params.X_feature_sets += X_feauture_sets
+            self.group_params.X_feature_dict = X_feature_dict
 
     def create_cuma_pctChg_features(self):
-            first_data_set = self.group_params.data_sets[0]
-            pct_Chg_feautures = (filter(lambda feature_set: feature_set.name == 'pctChg_vars' or feature_set.name == 'rolling_pctChg_vars', first_data_set.X_feature_sets))
+            new_feature_sets = []
+            pct_Chg_feautures = (filter(lambda feature_set: feature_set.name == 'pctChg_vars' or feature_set.name == 'rolling_pctChg_vars', self.group_params.X_feature_sets))
             for pct_Chg_feauture in pct_Chg_feautures:
                 cuma_feature_set, X_feauture_dict = self.add_cuma_pctChg_features(pct_Chg_feauture)
-                for data_set in self.group_params.data_sets:
-                    data_set.X_feature_sets.append(cuma_feature_set)
-                self.group_params.X_feature_dict = X_feauture_dict
+                new_feature_sets.append(cuma_feature_set)
                 self.group_params.X_cols.update(cuma_feature_set.cols)
-            print(len(self.group_params.X_feature_dict))
+            return new_feature_sets, X_feauture_dict
 
 
 
