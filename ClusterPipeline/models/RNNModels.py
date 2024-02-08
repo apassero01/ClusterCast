@@ -15,7 +15,7 @@ import json
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 import shutil
-
+import statistics
 import io
 
 
@@ -433,6 +433,12 @@ class RNNModel(models.Model):
         """
         Create a prediction object
         """
+        print("Creating prediction")
+        print(prediction_values)
+        print(prediction_dates)
+        print(stock_prediction.id)
+        print(prev_day_price)
+
         model_prediction = ModelPrediction.objects.create(
             rnn_model=self,
             stock_prediction=stock_prediction,
@@ -514,10 +520,10 @@ def weighted_dir_acc(predicted, actual):
 
 class ModelPrediction(models.Model):
     rnn_model = models.ForeignKey(
-        RNNModel, on_delete=models.CASCADE, related_name="model_predictions"
+        RNNModel, on_delete=models.CASCADE, related_name="rnn_model_predictions"
     )
     stock_prediction = models.ForeignKey(
-        "StockPrediction", on_delete=models.CASCADE, related_name="model_predictions"
+        "StockPrediction", on_delete=models.CASCADE, related_name="stock_model_predictions"
     )
     predicted_values = models.JSONField(default=list, blank=True)
     prediction_dates = models.JSONField(default=list, blank=True)
@@ -533,9 +539,11 @@ class ModelPrediction(models.Model):
 
     def initialize(self):
         self.cluster_id = self.rnn_model.cluster.pk
-        self.group_id = self.rnn_model.cluster.group.pk
-        self.filtered_accuracy = self.predicted_values.mean()
-        self.epochs = self.rnn_model.model_metrics["effective_epochs"]
+        self.group_id = self.rnn_model.cluster.cluster_group.pk
+        step_results = list(StepResult.objects.filter(RNNModel=self.rnn_model))
+        filtered_predicted_values = [step.dir_accuracy for step, pred in zip(step_results, self.predicted_values) if pred is not None]
+        self.filtered_accuracy = statistics.mean(filtered_predicted_values)
+        self.effective_epochs = self.rnn_model.model_metrics["effective_epochs"]
         self.start_date = self.prediction_dates[0]
         self.end_date = self.prediction_dates[-1]
     

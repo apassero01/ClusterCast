@@ -333,9 +333,9 @@ def forcast(request):
                 forcast_timeline.add_prediction_range(
                     start_date=prediction_start_date,
                     end_date=prediction_end_date,
-                    total_model_accuracy_thresh=60,
-                    individual_model_accuracy_thresh=64,
-                    epochs_threshold=6,
+                    total_model_accuracy_thresh=40,
+                    individual_model_accuracy_thresh=40,
+                    epochs_threshold=1,
                 )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk
@@ -355,9 +355,9 @@ def forcast(request):
             forcast_timeline.add_prediction_range(
                 start_date=prediction_start_date,
                 end_date=prediction_end_date,
-                total_model_accuracy_thresh=60,
-                individual_model_accuracy_thresh=64,
-                epochs_threshold=6,
+                total_model_accuracy_thresh=40,
+                individual_model_accuracy_thresh=40,
+                epochs_threshold=1,
             )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk

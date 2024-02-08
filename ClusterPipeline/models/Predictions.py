@@ -60,7 +60,7 @@ class StockPrediction(Prediction):
 
     ticker = models.CharField(max_length=10)
     interval = models.CharField(max_length=10)
-    prediction_start_date = models.DateField()
+    prediction_start_date = models.DateTimeField()
     df_file = models.FileField(
         upload_to=prediction_directory_path, blank=True, null=True
     )
@@ -68,7 +68,7 @@ class StockPrediction(Prediction):
         "StockForcastTimeline", on_delete=models.CASCADE, blank=True, null=True
     )
     dir_path = models.CharField(max_length=100, blank=True, null=True)
-    final_prediction_date = models.DateField(blank=True, null=True)
+    final_prediction_date = models.DateTimeField(blank=True, null=True)
     cluster_group_params = models.JSONField(default=list, blank=True, null=True)
 
     def initialize(self):
@@ -247,7 +247,7 @@ class StockPrediction(Prediction):
                 step_results = StepResult.objects.filter(RNNModel=model)
                 for pred, step_result in zip(cur_prediction, step_results):
                     if step_result.dir_accuracy < individual_model_accuracy_thresh:
-                        price_predictions.append(pd.NA)
+                        price_predictions.append(None)
                         continue
 
                     daily_accuracy.append(step_result.dir_accuracy)
@@ -608,13 +608,13 @@ class StockPrediction(Prediction):
 
         return concat_df_sorted
     
-    def create_prediction_output(self): 
-        self.model_predictions = list(ModelPrediction.objects.filter(stock_prediction=self))
+    def create_prediction_output(self):  
+        model_predictions = list(self.stock_model_predictions.all().order_by('start_date'))
 
         dates = pd.date_range(self.prediction_start_date, self.final_prediction_date, freq=self.market_calendar).tolist()
 
         model_prediction_output = [] 
-        for model_prediction in self.model_predictions:
+        for model_prediction in model_predictions:
             model_prediction_output.append(model_prediction.create_model_pred_dict())
 
         return dates, model_prediction_output
@@ -677,35 +677,7 @@ class StockPrediction(Prediction):
 
         return subplots_fig
 
-    def save_data_frame(self, df):
-        """
-        Saves the dataframe to disk
-        """
-        if self.df_file:
-            self.df_file.delete()
-        # Fill NaN values with a placeholder
-        df_filled = df.fillna(
-            "NaN_placeholder"
-        )  # Replace 'NaN_placeholder' with your chosen placeholder
-        json_data = df_filled.to_json(orient="split")
 
-        file_name = "pred_df" + ".json"
-
-        self.df_file = ContentFile(json_data, file_name)
-
-    def load_data_frame(self):
-        """
-        Loads the dataframe from disk
-        """
-        with open(self.df_file.path, "r") as file:
-            json_data = file.read()
-
-        # Load DataFrame with the same orientation
-        df = pd.read_json(json_data, orient="split")
-
-        # Convert placeholder back to NaN
-        df.replace("NaN_placeholder", pd.NA, inplace=True)
-        return df
 
     def save_cluster_visualization(self, fig, cluster_id):
         """
@@ -738,9 +710,9 @@ class StockForcastTimeline(ForcastTimeline):
 
     ticker = models.CharField(max_length=10)
     interval = models.CharField(max_length=10)
-    prediction_start_date = models.DateField()
-    prediction_end_date = models.DateField()
-    final_prediction_date = models.DateField(blank=True, null=True)
+    prediction_start_date = models.DateTimeField()
+    prediction_end_date = models.DateTimeField()
+    final_prediction_date = models.DateTimeField(blank=True, null=True)
     df_file = models.FileField(
         upload_to=forcast_timeline_directory_path, blank=True, null=True
     )
@@ -811,6 +783,7 @@ class StockForcastTimeline(ForcastTimeline):
                 prediction_start_date=date,
                 forcast_timeline=self,
             )
+            stock_prediction.save()
             stock_prediction.initialize()
             stock_prediction.predict_all_groups(
                 total_model_accuracy_thresh=total_model_accuracy_thresh,
@@ -882,8 +855,11 @@ class StockForcastTimeline(ForcastTimeline):
         print(self.market_calendar)
         dates = pd.date_range(start = self.prediction_start_date, end = self.final_prediction_date, freq=self.market_calendar).tolist()
         for stock_prediction in self.stock_predictions:
+            stock_prediction.initialize()
             cur_dates, model_prediction_output = stock_prediction.create_prediction_output()
-            model_predictions_output.append(model_prediction_output)
+            model_predictions_output.append({'prediction_id': stock_prediction.id, 
+                                            'prediction_start_date': stock_prediction.prediction_start_date, 
+                                            'results': model_prediction_output})
         
         return dates, model_predictions_output
         
