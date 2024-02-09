@@ -612,6 +612,7 @@ class StockPrediction(Prediction):
         model_predictions = list(self.stock_model_predictions.all().order_by('start_date'))
 
         dates = pd.date_range(self.prediction_start_date, self.final_prediction_date, freq=self.market_calendar).tolist()
+        dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
 
         model_prediction_output = [] 
         for model_prediction in model_predictions:
@@ -854,11 +855,14 @@ class StockForcastTimeline(ForcastTimeline):
         
         print(self.market_calendar)
         dates = pd.date_range(start = self.prediction_start_date, end = self.final_prediction_date, freq=self.market_calendar).tolist()
+        dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
+        
         for stock_prediction in self.stock_predictions:
             stock_prediction.initialize()
             cur_dates, model_prediction_output = stock_prediction.create_prediction_output()
             model_predictions_output.append({'prediction_id': stock_prediction.id, 
-                                            'prediction_start_date': stock_prediction.prediction_start_date, 
+                                            'prediction_start_date': stock_prediction.prediction_start_date.strftime("%Y-%m-%d %H:%M:%S"), 
+                                            'prediction_end_date': stock_prediction.final_prediction_date.strftime("%Y-%m-%d %H:%M:%S"),
                                             'results': model_prediction_output})
         
         return dates, model_predictions_output

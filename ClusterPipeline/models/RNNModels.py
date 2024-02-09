@@ -555,9 +555,10 @@ class ModelPrediction(models.Model):
             "cluster_id": self.cluster_id,
             "filtered_accuracy": self.filtered_accuracy,
             "effective_epochs": self.effective_epochs,
-            "start_date": self.start_date,
-            "end_date": self.end_date,
+            "start_date": self.start_date.strftime("%Y-%m-%d: %H:%M:%S"),
+            "end_date": self.end_date.strftime("%Y-%m-%d: %H:%M:%S"),
             "predicted_values": self.predicted_values,
+            "predicted_dates": self.prediction_dates,
             "prev_day_price": self.prev_day_price,
             "status": self.status,
 

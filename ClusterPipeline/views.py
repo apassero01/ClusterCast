@@ -323,11 +323,17 @@ def forcast(request):
                 interval=interval,
             )
             forcast_timeline.initialize()
+            print(prediction_start_date)
+            print(type(prediction_start_date))
+
+            prediction_start_date = datetime.strptime(prediction_start_date, "%Y-%m-%d")
+
+            prediction_end_date = datetime.strptime(prediction_end_date, "%Y-%m-%d")
 
             if (
-                datetime.strptime(prediction_start_date, "%Y-%m-%d").date()
+                prediction_start_date
                 < forcast_timeline.prediction_start_date
-                or datetime.strptime(prediction_end_date, "%Y-%m-%d").date()
+                or prediction_end_date
                 > forcast_timeline.prediction_end_date
             ):
                 forcast_timeline.add_prediction_range(
@@ -418,11 +424,6 @@ def forcast_detail(request, forcast_id):
     print(dates)
     print(model_prediction_output)
 
-    forcast.rebuild_data_frame()
-    forcast_df = forcast.load_data_frame()
-    print(forcast_df.head())
-    forcast_df_json = forcast_df.to_json(orient="split", date_format="iso")
-
     close_df = yf.download(
         prediction.ticker,
         start=start_date,
@@ -436,16 +437,12 @@ def forcast_detail(request, forcast_id):
 
     close_df_json = close_df.to_json(orient="split", date_format="iso")
 
-    stock_predictions = []
-    for prediction in forcast.stock_predictions: 
-        stock_predictions.append({'prediction_id': prediction.pk,  'start_date' : prediction.prediction_start_date.strftime("%Y-%m-%d")})
-
     return render(
         request,
         "ClusterPipeline/forcast_detail.html",
         {
-            "stock_predictions": json.dumps(stock_predictions),
-            "pred_df": forcast_df_json,
+            "stock_predictions": json.dumps(model_prediction_output),
+            "dates": json.dumps(dates),
             "close_df": close_df_json,
             "tickers": tickers,
             "prediction_id": forcast_id,
