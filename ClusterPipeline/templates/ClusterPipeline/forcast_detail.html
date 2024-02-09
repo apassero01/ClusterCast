@@ -714,34 +714,7 @@
 
         return Array.from(allDates).sort();
     }
-    function arrayToHtmlTable(array) {
-        if (array.length === 0) {
-            return "<p>No data available.</p>";
-        }
 
-        let table = "<table>";
-
-        // Add header row
-        table += "<tr>";
-        table += "<th>Index</th>"; // Index column header
-        Object.keys(array[0]).forEach(header => {
-            table += `<th>${header}</th>`;
-        });
-        table += "</tr>";
-
-        // Add data rows
-        array.forEach((row, index) => {
-            table += "<tr>";
-            table += `<td>${index}</td>`; // Index column data
-            Object.values(row).forEach(cell => {
-                table += `<td>${cell}</td>`;
-            });
-            table += "</tr>";
-        });
-
-        table += "</table>";
-        return table;
-    }
 
     function toggleDateButton(button, prediction) {
         // Remove the active class from all buttons

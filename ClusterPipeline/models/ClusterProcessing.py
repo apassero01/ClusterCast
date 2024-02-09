@@ -100,6 +100,51 @@ class SupportedParams(models.Model):
         for feature in rolling_feat: 
             self.rolling_features += feature.cols
 
+    
+    def remove_features(self, feature_sub_category): 
+        '''
+        Method to remove a feature from the list of features
+        '''
+        tickers = ['spy']
+        start = '2020-01-01'
+        target_cols = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
+        n_steps = 2
+        interval = '1d'
+        cluster_features = ['pctChgclose_cumulative']
+        group_params = StockClusterGroupParams(start_date = start, tickers = tickers, interval = interval, target_cols = target_cols, n_steps = n_steps,cluster_features = cluster_features)
+        group_params.initialize()
+        group_params.scaling_dict = {
+                    'price_vars': ScalingMethod.SBSG,
+                    'trend_vars' : ScalingMethod.SBS,
+                    'pctChg_vars' : ScalingMethod.QUANT_MINMAX,
+                    'rolling_vars' : ScalingMethod.QUANT_MINMAX_G,
+                    'target_vars' : ScalingMethod.UNSCALED
+                    }
+        cluster_group = StockClusterGroup()
+        cluster_group.set_group_params(group_params)
+        cluster_group.create_data_set(to_train=False)
+        cluster_group.create_sequence_set()
+
+        X_feature_sets = cluster_group.group_params.X_feature_sets
+        for feature_set in X_feature_sets:
+            for key in feature_set.sub_categories.keys():
+                if key == feature_sub_category:
+                    features_to_remove = feature_set.sub_categories[key]
+        
+        all_models = RNNModel.objects.all()
+
+        models_to_delete = []
+
+        for model in all_models:
+            model_features = model.model_features
+            for feature in features_to_remove:
+                if feature in model_features:
+                    models_to_delete.append(model)
+                    break
+        
+        for model in models_to_delete:
+            model.delete()
+
 class ClusterGroupParams(models.Model): 
     '''
     Class to contain parameters for running the pipeline. This class is abstract

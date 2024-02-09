@@ -32,6 +32,8 @@ class FeatureSet:
         self.ticker = ticker
         self.percentiles = percentiles
 
+        self.sub_categories = {}
+
     def __repr__(self) -> str:
         return self.name
 
@@ -351,14 +353,23 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
     feature_sets = [] 
     price_feature_set = FeatureSet(scaling_method, 'price_vars',(0,1),ticker=ticker)
 
-    price_feature_set.cols +=["open", "high", "low","close"] # add close
+    ohlc_cols = ["open", "high", "low", "close"]
+    price_feature_set.cols += ohlc_cols
+    price_feature_set.sub_categories['ohlc'] = ohlc_cols
+
 
     # Create price features
+    ma_cols = []
     for length in moving_average_vals:
-        df["sma" + str(length)] = ta.sma(df.close, length=length)
-        df["ema" + str(length)] = ta.ema(df.close, length=length)
-        price_feature_set.cols.append("sma" + str(length))
-        price_feature_set.cols.append("ema" + str(length))
+        ema_col_name = "ema" + str(length)
+        sma_col_name = "sma" + str(length) 
+        df[sma_col_name] = ta.sma(df.close, length=length)
+        df[ema_col_name] = ta.ema(df.close, length=length)
+        ma_cols.append(sma_col_name)
+        ma_cols.append(ema_col_name)
+    price_feature_set.cols += ma_cols
+    price_feature_set.sub_categories['ma'] = ma_cols
+    
 
 
     # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
@@ -367,12 +378,15 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
         
     bollinger_obj = technical_analysis.volatility.BollingerBands(df.close, window=20, window_dev=2)
 
-    df['bb_high'] = bollinger_obj.bollinger_hband()
-    df['bb_low'] = bollinger_obj.bollinger_lband()
-    df['bb_ma'] = bollinger_obj.bollinger_mavg()
+    df['bb_high20'] = bollinger_obj.bollinger_hband()
+    df['bb_low20'] = bollinger_obj.bollinger_lband()
+    df['bb_ma20'] = bollinger_obj.bollinger_mavg()
 
-    price_feature_set.cols += ['bb_high', 'bb_low', 'bb_ma']
-
+    bb_cols = ['bb_high20', 'bb_low20', 'bb_ma20']
+    price_feature_set.cols += bb_cols
+    price_feature_set.sub_categories['bb'] = bb_cols
+    
+    # some don chian channels 
     # bb_feauture_set = FeatureSet(scaling_method, 'bb_vars', (0,1))
 
     if cluster_features:
@@ -417,7 +431,7 @@ def create_trend_vars(df: pd.DataFrame,scaling_method = ScalingMethod.SBS, ticke
        
 
 def create_pctChg_vars(
-    df: pd.DataFrame, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1, ticker = None
+    df: pd.DataFrame, X_feature_sets, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1, ticker = None
 ) -> (pd.DataFrame, FeatureSet):
     """
     Create key target variables from the OHLC processed data.
@@ -443,50 +457,66 @@ def create_pctChg_vars(
 
     feature_set = FeatureSet(scaling_method,"pctChg_vars", ticker = ticker)
 
-    for column in df.columns:
-        df['pctChg' + column] = df[column].pct_change() * 100.0
-        feature_set.cols.append('pctChg' + column)
-    df.replace([np.inf, -np.inf], 0, inplace=True)
+    for cur_feature_set in X_feature_sets:
+        for key in cur_feature_set.sub_categories:
+            cur_cols = cur_feature_set.sub_categories[key]
+            for col in cur_cols:
+                df['pctChg' + col] = df[col].pct_change() * 100.0
+                feature_set.cols.append('pctChg' + col)
+    df.replace([np.inf, -np.inf], 0, inplace=True)          
 
-        # Close moving average differences 
+
+    # Close moving average differences 
+
     ma_cols = [col for col in df.columns if "ma" in col]
+    percent_diff_cols = []
     for col in ma_cols:
         df['pctChg+' + col+ "Close"] = (abs(df[col] - df['close']) / ((df[col] + df['close']) / 2)) * 100
-        feature_set.cols.append('pctChg+' + col+ "Close")
+        percent_diff_cols.append('pctChg+' + col+ "Close")
+    feature_set.sub_categories['ma_diff'] = percent_diff_cols
+    feature_set.cols += percent_diff_cols
+
     
     # # % jump from open to high
-    # df['opHi'] = (df.high - df.open) / df.open * 100.0
-    # feature_set.cols.append('opHi')
+    intraday_cols = [] 
+    df['opHi'] = (df.high - df.open) / df.open * 100.0
+    intraday_cols.append('opHi')
+    
 
-    # # % drop from open to low
-    # df['opLo'] = (df.low - df.open) / df.open * 100.0
-    # feature_set.cols.append('opLo')
+    # % drop from open to low
+    df['opLo'] = (df.low - df.open) / df.open * 100.0
+    intraday_cols.append('opLo')
 
-    # # % drop from high to close
-    # df['hiCl'] = (df.close - df.high) / df.high * 100.0
-    # feature_set.cols.append('hiCl')
+    # % drop from high to close
+    df['hiCl'] = (df.close - df.high) / df.high * 100.0
+    intraday_cols.append('hiCl')
 
-    # # % raise from low to close
-    # df['loCl'] = (df.close - df.low) / df.low * 100.0
-    # feature_set.cols.append('loCl')
+    # % raise from low to close
+    df['loCl'] = (df.close - df.low) / df.low * 100.0
+    intraday_cols.append('loCl')
 
-    # # % spread from low to high
-    # df['hiLo'] = (df.high - df.low) / df.low * 100.0
-    # feature_set.cols.append('hiLo')
+    # % spread from low to high
+    df['hiLo'] = (df.high - df.low) / df.low * 100.0
+    intraday_cols.append('hiLo')
 
-    # # % spread from open to close
-    # df['opCl'] = (df.close - df.open) / df.open * 100.0
-    # feature_set.cols.append('opCl')
+    # % spread from open to close
+    df['opCl'] = (df.close - df.open) / df.open * 100.0
+    intraday_cols.append('opCl')
 
     # # Calculations for the percentage changes
     df["pctChgClOp"] = np.insert(np.divide(df.open.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    feature_set.cols.append('pctChgClOp')
+    intraday_cols.append('pctChgClOp')
 
     df["pctChgClLo"] = np.insert(np.divide(df.low.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    feature_set.cols.append('pctChgClLo')
+    intraday_cols.append('pctChgClLo')
 
     df["pctChgClHi"] = np.insert(np.divide(df.high.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    feature_set.cols.append('pctChgClHi')
+    intraday_cols.append('pctChgClHi')
+
+    feature_set.sub_categories['intra_day'] = intraday_cols
+    feature_set.cols += intraday_cols
+    
+    
 
     for col in feature_set.cols:
         df[col] = df[col].fillna(df[col].mean())
