@@ -35,16 +35,6 @@ def prediction_directory_path(instance, filename):
     )
 
 
-def forcast_timeline_directory_path(instance, filename):
-    """
-    Returns the path of the directory where the file will be saved.
-    Function is passed as a parameter when declaring FileField in model.
-    """
-    return os.path.join(
-        "forcast_timelines", f"{instance.ticker}-{instance.interval}", filename
-    )
-
-
 class Prediction(models.Model):
     pass
 
@@ -401,111 +391,6 @@ class StockPrediction(Prediction):
 
         self.generic_dataset = stock_dataset
 
-    def visualize_future_predictions(self, df_predictions):
-        """
-        Creates a plotly figure that visualizes the closing prices and predictions for the ticker and interval specified.
-        Currently, as we wanted dynamic visualization, we converted this function to js and moved it to the frontend.
-        Method is not currently used but still good to have
-        """
-        # Assuming self.generic_dataset.test_df is a DataFrame available in the class
-        close_prices = self.generic_dataset.test_df.tail(20)["close"]
-
-        closing_dates = close_prices.index
-
-        # Create a figure
-        fig = go.Figure()
-
-        # Add trace for closing prices
-        fig.add_trace(
-            go.Scatter(
-                x=closing_dates,
-                y=close_prices,
-                mode="lines+markers",
-                name="Closing Prices",
-            )
-        )
-
-        # Process predictions
-        date_columns = [
-            col
-            for col in df_predictions.columns
-            if col.startswith("202") or col.startswith("203")
-        ]
-        prediction_dates = pd.to_datetime(date_columns, format="%Y-%m-%d")
-        prediction_dates = prediction_dates[prediction_dates > closing_dates[-1]]
-        prediction_values = df_predictions.loc[:, prediction_dates.strftime("%Y-%m-%d")]
-
-        median_predictions = prediction_values.median(axis=0)
-        iq1_predictions = prediction_values.quantile(0.25, axis=0, numeric_only=False)
-        iq3_predictions = prediction_values.quantile(0.75, axis=0, numeric_only=False)
-
-        last_price = close_prices.iloc[-1]
-        percent_change = (median_predictions - last_price) / last_price * 100
-
-        # Add trace for predictions
-        fig.add_trace(
-            go.Scatter(
-                x=prediction_dates,
-                y=median_predictions,
-                mode="lines+markers",
-                name="Predictions",
-                line=dict(color="red"),
-            )
-        )
-
-        # Add IQR area
-        fig.add_trace(
-            go.Scatter(
-                x=prediction_dates,
-                y=iq1_predictions,
-                fill=None,
-                mode="lines",
-                line=dict(color="lightgreen"),
-                showlegend=False,
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=prediction_dates,
-                y=iq3_predictions,
-                fill="tonexty",
-                mode="lines",
-                line=dict(color="lightgreen"),
-                name="Predictions IQR",
-            )
-        )
-
-        # Adding text labels for percent changes
-        for i, date in enumerate(prediction_dates):
-            fig.add_annotation(
-                x=date,
-                y=median_predictions[i],
-                text=f"{percent_change.iloc[i]:.2f}%",
-                showarrow=False,
-                yshift=10,
-            )
-
-        closing_dates_str = closing_dates.strftime("%Y-%m-%d").tolist()
-        prediction_dates_str = prediction_dates.strftime("%Y-%m-%d").tolist()
-        all_dates_str = closing_dates_str + prediction_dates_str
-
-        fig.update_layout(
-            title=f"Closing and Predicted Prices for {self.ticker}",
-            xaxis=dict(
-                title="Date",
-                type="category",  # This specifies that xaxis is categorical
-                tickmode="array",
-                tickvals=list(range(len(all_dates_str))),  # Position for each tick
-                ticktext=all_dates_str,  # Date string for each tick
-                tickangle=-90,
-            ),
-            yaxis_title="Price",
-            legend=dict(y=1, x=1),
-            hovermode="x",
-        )
-
-        return fig
-
     def find_matching_clusters(
         self, future_sequence_element, cluster_group, feature_dict, length_factor=0.1
     ):
@@ -565,61 +450,6 @@ class StockPrediction(Prediction):
         indices = [feature_dict[feature] for feature in features]
 
         return seq[:, indices]
-
-    def create_pred_df(self, prediction_list):
-        """
-        Merge all dfs in the list using outer join on date
-        """
-        concat_df = pd.DataFrame({"date": []})
-
-        if len(prediction_list) > 0:
-            for df in prediction_list:
-                if df.empty:
-                    continue
-                concat_df = concat_df.merge(df, how="outer", on="date")
-
-        # Transpose the DataFrame so that dates become the row indices
-        concat_df = concat_df.set_index("date").T
-
-        if concat_df.empty:
-            return concat_df
-
-        date_columns = [
-            col
-            for col in concat_df.columns
-            if col.startswith("202") or col.startswith("203")
-        ]
-        non_date_columns = [
-            "avg_accuracy",
-            "effective_epochs",
-            "start_date",
-            "group_id",
-            "cluster_id",
-            "model_id",
-            "status",
-        ]
-
-        # Sort by the datetime index
-        date_columns_sorted = sorted(date_columns)
-
-        # Reorder the DataFrame columns by placing the date columns first (sorted), followed by the non-date columns
-        final_columns_order = date_columns_sorted + non_date_columns
-        concat_df_sorted = concat_df[final_columns_order]
-
-        return concat_df_sorted
-    
-    def create_prediction_output(self):  
-        model_predictions = list(self.stock_model_predictions.all().order_by('start_date'))
-
-        dates = pd.date_range(self.prediction_start_date, self.final_prediction_date, freq=self.market_calendar).tolist()
-        dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
-
-        model_prediction_output = [] 
-        for model_prediction in model_predictions:
-            model_prediction_output.append(model_prediction.create_model_pred_dict())
-
-        return dates, model_prediction_output
-
 
 
     def visualize_current_and_cluster(self, cluster, X_cluster, cluster_features):
@@ -697,6 +527,29 @@ class StockPrediction(Prediction):
         fig = go.Figure()
         fig = fig.from_html(file_path)
         return fig
+    
+    def create_prediction_output(self):  
+        """
+        Generate the json object from all model predictions for the forcast timeline frontend
+        """
+
+        model_predictions = list(self.stock_model_predictions.all().order_by('start_date'))
+
+        dates = pd.date_range(self.prediction_start_date, self.final_prediction_date, freq=self.market_calendar).tolist()
+        dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
+
+        model_prediction_output = [] 
+        for model_prediction in model_predictions:
+            model_prediction_output.append(model_prediction.create_model_pred_dict())
+
+        return dates, model_prediction_output
+    
+    def rebuild_predictions(self, model_prediction_output):
+        for pred_output in model_prediction_output: 
+            model_prediction = ModelPrediction.objects.get(pk = pred_output['model_prediction_id'])
+            model_prediction.update_prediction(pred_output)
+            model_prediction.save()
+
 
 
 class ForcastTimeline(models.Model):
@@ -714,9 +567,6 @@ class StockForcastTimeline(ForcastTimeline):
     prediction_start_date = models.DateTimeField()
     prediction_end_date = models.DateTimeField()
     final_prediction_date = models.DateTimeField(blank=True, null=True)
-    df_file = models.FileField(
-        upload_to=forcast_timeline_directory_path, blank=True, null=True
-    )
 
     def initialize(self):
         """
@@ -751,9 +601,8 @@ class StockForcastTimeline(ForcastTimeline):
             self.final_prediction_date = self.stock_predictions[-1].final_prediction_date
         else:
             self.prediction_dates = []
-
-        if self.df_file:
-            self.forcast_dataframe = self.load_data_frame()
+        
+        self.save()
 
     def add_prediction_range(
         self,
@@ -791,6 +640,10 @@ class StockForcastTimeline(ForcastTimeline):
                 individual_model_accuracy_thresh=individual_model_accuracy_thresh,
                 epochs_threshold=epochs_threshold,
             )
+            if stock_prediction.final_prediction_date is None:
+                stock_prediction.delete()
+                continue
+
             self.prediction_dates.append(date)
             stock_prediction.save()
             self.stock_predictions.append(stock_prediction)
@@ -802,52 +655,17 @@ class StockForcastTimeline(ForcastTimeline):
         )
         self.prediction_start_date = self.prediction_dates[0]
         self.prediction_end_date = self.prediction_dates[-1]
-        self.final_prediction_date = self.stock_predictions[-1].final_prediction_date
 
-    def create_pred_df(self, predictions):
-        """
-        Merge all dfs in the list using outer join on date
-        """
-
-        concat_df = pd.DataFrame({"date": []})
-
-        for predictions in self.stock_predictions:
-            df = predictions.load_data_frame()
-            df = df.T
-            df = df.rename_axis("date")
-            concat_df = concat_df.merge(df, how="outer", on="date")
-
-        # Transpose the DataFrame so that dates become the row indices
-        concat_df = concat_df.set_index("date").T
-
-        if concat_df.empty:
-            return concat_df
-
-        date_columns = [
-            col
-            for col in concat_df.columns
-            if col.startswith("202") or col.startswith("203")
-        ]
-        non_date_columns = [
-            "avg_accuracy",
-            "effective_epochs",
-            "start_date",
-            "group_id",
-            "cluster_id",
-            "model_id",
-            "status",
-        ]
-
-        # Sort by the datetime index
-        date_columns_sorted = sorted(date_columns)
-
-        # Reorder the DataFrame columns by placing the date columns first (sorted), followed by the non-date columns
-        final_columns_order = date_columns_sorted + non_date_columns
-        concat_df_sorted = concat_df[final_columns_order]
-
-        return concat_df_sorted
+        for i in range(len(self.stock_predictions) - 1, 0, -1):
+            if self.stock_predictions[i].final_prediction_date is not None:
+                self.final_prediction_date = self.stock_predictions[i].final_prediction_date
+                break
     
     def create_prediction_output(self):
+        """
+        Generate the json object from all model predictions for the forcast timeline frontend
+        """
+
         if len(self.stock_predictions) == 0 or self.final_prediction_date is None:
             return [], []
         
@@ -866,48 +684,13 @@ class StockForcastTimeline(ForcastTimeline):
                                             'results': model_prediction_output})
         
         return dates, model_predictions_output
+    
+    def rebuild_predictions(self, model_predictions_output):
+        for pred_output in model_predictions_output: 
+            stock_prediction = StockPrediction.objects.get(pk = pred_output['prediction_id'])
+            stock_prediction.rebuild_predictions(pred_output['results'])
+            stock_prediction.save()
         
-
-    def rebuild_data_frame(self):
-        new_df = self.create_pred_df(self.stock_predictions)
-        self.save_data_frame(new_df)
-        self.forcast_dataframe = new_df
-        self.save()
-
-    def load_data_frame(self):
-        """
-        Loads the dataframe from disk
-        """
-        print(self.df_file.name)
-        print(self.df_file.storage.exists(self.df_file.name))
-
-        print('FILE NAME", {}'.format(self.df_file.name))
-        with open(self.df_file.path, "r") as file:
-            json_data = file.read()
-
-        # Load DataFrame with the same orientation
-        df = pd.read_json(json_data, orient="split")
-
-        # Convert placeholder back to NaN
-        df.replace("NaN_placeholder", pd.NA, inplace=True)
-        return df
-
-    def save_data_frame(self, df):
-        """
-        Saves the dataframe to disk
-        """
-        if self.df_file:
-            self.df_file.delete()
-        # Fill NaN values with a placeholder
-        df_filled = df.fillna(
-            "NaN_placeholder"
-        )  # Replace 'NaN_placeholder' with your chosen placeholder
-        json_data = df_filled.to_json(orient="split")
-
-        file_name = "pred_df" + ".json"
-
-        self.df_file = ContentFile(json_data, file_name)
-
 
 @receiver(post_delete, sender=StockPrediction)
 def submission_delete(sender, instance, **kwargs):

@@ -549,6 +549,7 @@ class ModelPrediction(models.Model):
     
     def create_model_pred_dict(self):
         model_dict = {
+            "model_prediction_id": self.pk, 
             "model_id": self.rnn_model.pk,
             "stock_prediction_id": self.stock_prediction.pk,
             "group_id": self.group_id,
@@ -564,3 +565,6 @@ class ModelPrediction(models.Model):
 
         }
         return model_dict
+
+    def update_prediction(self, model_pred_dict): 
+        self.status = model_pred_dict["status"]

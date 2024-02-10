@@ -323,8 +323,6 @@ def forcast(request):
                 interval=interval,
             )
             forcast_timeline.initialize()
-            print(prediction_start_date)
-            print(type(prediction_start_date))
 
             prediction_start_date = datetime.strptime(prediction_start_date, "%Y-%m-%d")
 
@@ -382,26 +380,12 @@ def forcast_detail(request, forcast_id):
 
     if request.method == "POST":
         data = json.loads(request.body)
-        status_arr = data.get("status_arr")
+        stock_predictions = data.get("stock_predictions")
 
         forcast = Pred.StockForcastTimeline.objects.get(pk=forcast_id)
         forcast.initialize()
-        dates, model_prediction_output = forcast.create_prediction_output()
-        print(dates)
-        print(model_prediction_output)
-        df = forcast.forcast_dataframe
-        df["status"] = status_arr
-        for prediction in forcast.stock_predictions: 
-            new_df = df[df['start_date'] == prediction.prediction_start_date.strftime("%Y-%m-%d")]
-            # drop the columns where the whole columns is null
-            new_df = new_df.dropna(axis=1, how='all')
-            prediction.save_data_frame(new_df)
-            prediction.save()
 
-
-        forcast.forcast_dataframe = df
-        forcast.save_data_frame(df)
-        forcast.save()
+        forcast.rebuild_predictions(stock_predictions)
 
         return JsonResponse({"success": True})
     
@@ -421,8 +405,6 @@ def forcast_detail(request, forcast_id):
     )
 
     dates, model_prediction_output = forcast.create_prediction_output()
-    print(dates)
-    print(model_prediction_output)
 
     close_df = yf.download(
         prediction.ticker,
@@ -455,6 +437,9 @@ def forcast_detail(request, forcast_id):
     )
 
 def get_prediction_vis_files(request, prediction_id):
+    """
+    End point to return the cluster visualization files saved for a specific prediction
+    """
     try: 
         prediction = Pred.StockPrediction.objects.get(pk=prediction_id)
     except Pred.StockPrediction.DoesNotExist:
@@ -475,6 +460,9 @@ def get_prediction_vis_files(request, prediction_id):
     return JsonResponse(files_data)
 
 def get_models(request, model_ids):
+    '''
+    Method to retreive all of the models in list of model_ids
+    '''
     model_ids = model_ids.split(',')
     models = RNN.RNNModel.objects.filter(pk__in=model_ids)
     model_results = []
@@ -495,10 +483,10 @@ def get_models(request, model_ids):
     return JsonResponse(model_results, safe=False)
 
 
-
-
-
 def get_cluster_group(id):
+    """
+    Method to retreive a cluster group from the cache or the database
+    """
     cluster_group = cache.get(f"cluster_group_{id}")
 
     if not cluster_group:
