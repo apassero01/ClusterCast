@@ -5,7 +5,8 @@ import pandas_ta as ta
 import ta as technical_analysis
 from datetime import datetime, timedelta
 import yfinance as yf
-from .SequencePreprocessing import StockSequenceSet,ScalingMethod
+from .SequencePreprocessing import StockSequenceSet, ScalingMethod
+
 # from ClusterProcessing import ClusterGroupParams, StockClusterGroupParams
 from sklearn.preprocessing import (
     MinMaxScaler,
@@ -16,12 +17,21 @@ from sklearn.preprocessing import (
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor
 
+
 class FeatureSet:
     """
-    Class that encapsulates a set of features. A set of features is a subset of the columns in a Dateset object. 
+    Class that encapsulates a set of features. A set of features is a subset of the columns in a Dateset object.
     This is helpful for keeping track of different requirements for different groups of features
     """
-    def __init__(self, scaling_method, name ='', scale_range = (-1,1), ticker = None, percentiles = [5,95]):
+
+    def __init__(
+        self,
+        scaling_method,
+        name="",
+        scale_range=(-1, 1),
+        ticker=None,
+        percentiles=[5, 95],
+    ):
         self.name = name
         self.cols = []
         self.scaling_method = scaling_method
@@ -38,17 +48,17 @@ class FeatureSet:
         return self.name
 
 
-
 class DataSet:
     """
     Class to encapsuate a dataset. The dataset is essentially a list of dataframes of the
     same shape and size with the same features.
     """
-    def __init__(self,group_params):
+
+    def __init__(self, group_params):
         self.df = pd.DataFrame()
         self.group_params = group_params
 
-        self.initialize_group_params() 
+        self.initialize_group_params()
 
         self.training_df = pd.DataFrame()
         self.test_df = pd.DataFrame()
@@ -61,16 +71,17 @@ class DataSet:
 
         self.X_feature_sets = []
         self.y_feature_sets = []
-    
+
     def initialize_group_params(self):
-        self.group_params.X_cols = set() 
+        self.group_params.X_cols = set()
         self.group_params.y_cols = set()
-    
+
     def create_dataset(self):
         """
         Create the dataset from the tickers and start/end dates and interval
         """
         pass
+
     def create_features(self):
         """
         Create additonal featues for the dataset
@@ -87,7 +98,8 @@ class DataSet:
         """
         Preprocess the dataset
         """
-        pass 
+        pass
+
 
 class StockDataSet(DataSet):
 
@@ -101,50 +113,62 @@ class StockDataSet(DataSet):
     def __init__(self, group_params, ticker):
         super().__init__(group_params)
         self.ticker = ticker
-    
-    def preprocess_pipeline(self,to_train = True):
+
+    def preprocess_pipeline(self, to_train=True):
         """
         Preprocess the dataset
         """
         print("Creating and Processing Dataset")
         if not self.created_dataset:
             self.create_dataset()
-            if len(self.df) < 1 :
+            if len(self.df) < 1:
                 raise ValueError("No dataframes created")
         if not self.created_features:
             self.create_features()
             if len(self.group_params.X_cols) < 0:
                 raise ValueError("No features created")
-        
+
         if not self.created_y_targets:
             self.create_y_targets(self.group_params.target_cols)
 
         self.train_test_split()
 
-        if len(self.training_df) < 1: 
+        if len(self.training_df) < 1:
             raise ValueError("training_set is None")
         if len(self.test_df) < 1:
             raise ValueError("test_set is None")
 
-        quant_min_max_feature_sets = [feature_set for feature_set in self.X_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value] 
-        quant_min_max_feature_sets += [feature_set for feature_set in self.y_feature_sets if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value]
+        quant_min_max_feature_sets = [
+            feature_set
+            for feature_set in self.X_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value
+            or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
+        ]
+        quant_min_max_feature_sets += [
+            feature_set
+            for feature_set in self.y_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value
+            or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
+        ]
 
         print("Scaling Quant Min Max Features")
         if len(quant_min_max_feature_sets) > 0:
-            self.training_df, self.test_df = self.scale_quant_min_max(quant_min_max_feature_sets, self.training_df, self.test_df)
+            self.training_df, self.test_df = self.scale_quant_min_max(
+                quant_min_max_feature_sets, self.training_df, self.test_df
+            )
         print("Quant Min Max Features Scaled")
-        
-        
+
         if to_train:
             # print("Running RandomForest Regressor to find strong predictors")
             # if not hasattr(self.group_params, 'strong_predictors'):
             #     strong_predictors = self.strong_predictors_rf()
-            #     self.group_params.strong_predictors = strong_predictors 
+            #     self.group_params.strong_predictors = strong_predictors
 
-            self.group_params.strong_predictors = [] #TODO remove this when strong predictors are implemented
+            self.group_params.strong_predictors = (
+                []
+            )  # TODO remove this when strong predictors are implemented
 
             print("RandomForest Compete")
-        
 
         if len(self.group_params.X_cols) < 1:
             raise ValueError("No features created")
@@ -154,12 +178,11 @@ class StockDataSet(DataSet):
             raise ValueError("No X_feature_sets created")
         if len(self.y_feature_sets) < 1:
             raise ValueError("No y_feature_sets created")
-        
+
         self.group_params.X_feature_sets += self.X_feature_sets
         self.group_params.y_feature_sets += self.y_feature_sets
 
         print("Dataset Preprocessing Complete")
-
 
     def create_dataset(self):
         """
@@ -168,8 +191,12 @@ class StockDataSet(DataSet):
         if self.created_dataset:
             return
 
-
-        self.df, cols = get_stock_data(self.ticker, self.group_params.start_date, self.group_params.end_date, self.group_params.interval)
+        self.df, cols = get_stock_data(
+            self.ticker,
+            self.group_params.start_date,
+            self.group_params.end_date,
+            self.group_params.interval,
+        )
 
         self.group_params.X_cols.update(cols)
 
@@ -181,89 +208,107 @@ class StockDataSet(DataSet):
         """
         if self.created_features:
             return
-        
-        X_cols = set() 
+
+        X_cols = set()
 
         # Create price features
-        self.df, feature_sets = create_price_vars(self.df,scaling_method=self.scaling_dict['price_vars'], cluster_features = self.group_params.cluster_features, ticker = self.ticker)
+        self.df, feature_sets = create_price_vars(
+            self.df,
+            scaling_method=self.scaling_dict["price_vars"],
+            cluster_features=self.group_params.cluster_features,
+            ticker=self.ticker,
+        )
         for feature_set in feature_sets:
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
-        #todo clean this up
-        if 'bb_close' in X_cols:
+        # todo clean this up
+        if "bb_close" in X_cols:
             print("bb_close in X_cols")
 
         # Create trend features
-        self.df, feature_set = create_trend_vars(self.df,scaling_method=self.scaling_dict['trend_vars'], ticker = self.ticker)
+        self.df, feature_set = create_trend_vars(
+            self.df, scaling_method=self.scaling_dict["trend_vars"], ticker=self.ticker
+        )
 
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
-        # Create percent change variables 
-        self.df, feature_set = create_pctChg_vars(self.df,scaling_method=self.scaling_dict['pctChg_vars'], ticker = self.ticker)
+        # Create percent change variables
+        self.df, feature_set = create_pctChg_vars(
+            self.df, scaling_method=self.scaling_dict["pctChg_vars"], ticker=self.ticker
+        )
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create rolling sum variables
         pctChg_cols = [col for col in X_cols if "pctChg" in col]
-        
-        for col in pctChg_cols: 
-            self.df, feature_set = create_rolling_sum_vars(self.df, col, scaling_method=self.scaling_dict['rolling_vars'],ticker = self.ticker)
+
+        for col in pctChg_cols:
+            self.df, feature_set = create_rolling_sum_vars(
+                self.df,
+                col,
+                scaling_method=self.scaling_dict["rolling_vars"],
+                ticker=self.ticker,
+            )
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
-        
 
         # Update the group params with the new  columns
         self.group_params.X_cols.update(X_cols)
 
         self.created_features = True
-    
-    def train_test_split(self,feature_list = None, training_percentage = 0.8):
-    
+
+    def train_test_split(self, feature_list=None, training_percentage=0.8):
+
         if not feature_list:
-            feature_list = list(self.group_params.X_cols.union(self.group_params.y_cols))
+            feature_list = list(
+                self.group_params.X_cols.union(self.group_params.y_cols)
+            )
 
-            self.training_df, self.test_df = df_train_test_split(self.df, feature_list, training_percentage)
+            self.training_df, self.test_df = df_train_test_split(
+                self.df, feature_list, training_percentage
+            )
             # test_df = test_df.iloc[self.n_steps:,:] # Remove the first n_steps rows to prevent data leakage
-            #TODO mininmal data leakage needs to be addressed, when refactored, this class does not know the steps
+            # TODO mininmal data leakage needs to be addressed, when refactored, this class does not know the steps
 
-    def scale_quant_min_max(self,feature_sets, training_df, test_df):
+    def scale_quant_min_max(self, feature_sets, training_df, test_df):
         """
         Scales the features in the feature sets in dataframe form using custom MinMaxPercentileScaler
         """
 
-
         training_df = training_df.copy()
         test_df = test_df.copy()
 
-        
-        #Scale the features in the feature sets
-        for feature_set in feature_sets: 
+        # Scale the features in the feature sets
+        for feature_set in feature_sets:
             if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value:
                 scaler = MinMaxPercentileScaler(percentile=feature_set.percentiles)
             if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value:
-                scaler = MinMaxPercentileScaler(scaling_mode = 'global', percentile=feature_set.percentiles)
+                scaler = MinMaxPercentileScaler(
+                    scaling_mode="global", percentile=feature_set.percentiles
+                )
             scaler.fit(training_df[feature_set.cols])
 
             # After fitting the scaler to the combined training dataframe, transform the individual dataframes
-                
-            training_df[feature_set.cols] = scaler.transform(training_df[feature_set.cols])
+
+            training_df[feature_set.cols] = scaler.transform(
+                training_df[feature_set.cols]
+            )
             test_df[feature_set.cols] = scaler.transform(test_df[feature_set.cols])
 
             feature_set.scaler = scaler
-        
-        
+
         return training_df, test_df
-    
+
     def scale_transform(self, df, feature_sets):
         """
         Scales the features in the feature sets in dataframe form using custom MinMaxPercentileScaler
         """
         df = df.copy()
-        #Scale the features in the feature sets
-        for feature_set in feature_sets: 
+        # Scale the features in the feature sets
+        for feature_set in feature_sets:
             df[feature_set.cols] = feature_set.scaler.transform(df[feature_set.cols])
-        
+
         return df
 
     def create_y_targets(self, cols_to_create_targets):
@@ -275,14 +320,19 @@ class StockDataSet(DataSet):
         """
         if self.created_y_targets:
             return
-        
-        self.df, feature_set = add_forward_rolling_sums(self.df, cols_to_create_targets, scaling_method=self.scaling_dict['target_vars'],ticker=self.ticker)
+
+        self.df, feature_set = add_forward_rolling_sums(
+            self.df,
+            cols_to_create_targets,
+            scaling_method=self.scaling_dict["target_vars"],
+            ticker=self.ticker,
+        )
 
         self.y_feature_sets.append(feature_set)
         self.group_params.y_cols.update(feature_set.cols)
-        self.created_y_targets = True 
+        self.created_y_targets = True
 
-    def strong_predictors_rf(self, num_features = 10): 
+    def strong_predictors_rf(self, num_features=10):
         """
         Use a random forest regressor to determine the most important features
         """
@@ -292,16 +342,20 @@ class StockDataSet(DataSet):
 
         X_strong_features = []
         for i in range(len(y_feautures)):
-            rf = RandomForestRegressor(n_estimators=250, random_state=42, n_jobs = 4)
+            rf = RandomForestRegressor(n_estimators=250, random_state=42, n_jobs=4)
             rf.fit(self.training_df[X_features], self.training_df[y_feautures[i]])
 
             # Get numerical feature importances
-            importances = pd.Series(data=rf.feature_importances_, index=X_features).sort_values(ascending=False)
+            importances = pd.Series(
+                data=rf.feature_importances_, index=X_features
+            ).sort_values(ascending=False)
 
             X_strong_features.append(importances[:num_features].index.tolist())
-        
+
         # combine the strong features for all y and remove duplicates
-        X_strong_features = list(set([item for sublist in X_strong_features for item in sublist]))
+        X_strong_features = list(
+            set([item for sublist in X_strong_features for item in sublist])
+        )
         return X_strong_features
 
 
@@ -332,7 +386,7 @@ def get_stock_data(
         vix = yf.download(["^VIX"], start=start_date, interval=interval)
 
     df = df.drop(columns="Adj Close")
-    df['Vix'] = vix['Close']
+    df["Vix"] = vix["Close"]
     # Standard column names needed for pandas-ta
     df = df.rename(
         columns={
@@ -346,12 +400,19 @@ def get_stock_data(
 
     return df, df.columns.tolist()
 
-def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100], scaling_method = ScalingMethod.SBSG, cluster_features = None, ticker = None) -> (pd.DataFrame, FeatureSet):
+
+def create_price_vars(
+    df: pd.DataFrame,
+    moving_average_vals=[5, 10, 20, 30, 50, 100],
+    scaling_method=ScalingMethod.SBSG,
+    cluster_features=None,
+    ticker=None,
+) -> (pd.DataFrame, FeatureSet):
     """
     Create price features from the OHLC data.
     """
-    feature_sets = [] 
-    price_feature_set = FeatureSet(scaling_method, 'price_vars',(0,1),ticker=ticker)
+    feature_sets = []
+    price_feature_set = FeatureSet(scaling_method, "price_vars", (0, 1), ticker=ticker)
 
     ohlc_cols = ["open", "high", "low", "close"]
     price_feature_set.cols += ohlc_cols
@@ -361,22 +422,19 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
     # Create price features
     ma_cols = []
     for length in moving_average_vals:
-        ema_col_name = "ema" + str(length)
-        sma_col_name = "sma" + str(length) 
-        df[sma_col_name] = ta.sma(df.close, length=length)
-        df[ema_col_name] = ta.ema(df.close, length=length)
-        ma_cols.append(sma_col_name)
-        ma_cols.append(ema_col_name)
-    price_feature_set.cols += ma_cols
-    price_feature_set.sub_categories['ma'] = ma_cols
-    
+        df["sma" + str(length)] = ta.sma(df.close, length=length)
+        df["ema" + str(length)] = ta.ema(df.close, length=length)
+        price_feature_set.cols.append("sma" + str(length))
+        price_feature_set.cols.append("ema" + str(length))
 
 
     # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
     # df = pd.concat([df, lag_df], axis=1)
     # feature_set.cols += lag_df.columns.tolist()
-        
-    bollinger_obj = technical_analysis.volatility.BollingerBands(df.close, window=20, window_dev=2)
+
+    bollinger_obj = technical_analysis.volatility.BollingerBands(
+        df.close, window=20, window_dev=2
+    )
 
     df['bb_high20'] = bollinger_obj.bollinger_hband()
     df['bb_low20'] = bollinger_obj.bollinger_lband()
@@ -393,11 +451,13 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
         # We want to scale all of the price cluster features on the same scale.
         # If cluster_feaure[0] is a price_var, the rest will also be
         if cluster_features[0] in price_feature_set.cols:
-            cluster_feature_set = FeatureSet(ScalingMethod.SBSG, 'cluster_vars', (0,1), ticker=ticker)
+            cluster_feature_set = FeatureSet(
+                ScalingMethod.SBSG, "cluster_vars", (0, 1), ticker=ticker
+            )
             for feature in cluster_features:
                 cluster_feature_set.cols.append(feature)
                 price_feature_set.cols.remove(feature)
-            
+
             feature_sets.append(cluster_feature_set)
 
     all_cols = []
@@ -405,18 +465,20 @@ def create_price_vars(df: pd.DataFrame,moving_average_vals = [5,10,20,30,50,100]
         all_cols += feature_set.cols
 
     for col in all_cols:
-        df[col] = df[col].fillna(method='bfill')
+        df[col] = df[col].fillna(method="bfill")
 
     feature_sets.append(price_feature_set)
 
     return df, feature_sets
 
 
-def create_trend_vars(df: pd.DataFrame,scaling_method = ScalingMethod.SBS, ticker = None) -> (pd.DataFrame, FeatureSet):
+def create_trend_vars(
+    df: pd.DataFrame, scaling_method=ScalingMethod.SBS, ticker=None
+) -> (pd.DataFrame, FeatureSet):
     """
     Create trend features which are made up of features that are not price features but are not percent change features.
     """
-    feature_set = FeatureSet(scaling_method,'trend_vars', (0,1),ticker= ticker)
+    feature_set = FeatureSet(scaling_method, "trend_vars", (0, 1), ticker=ticker)
 
     feature_set.cols += ["volume"]
 
@@ -428,7 +490,7 @@ def create_trend_vars(df: pd.DataFrame,scaling_method = ScalingMethod.SBS, ticke
         df[col] = df[col].fillna(df[col].mean())
 
     return df, feature_set
-       
+
 
 def create_pctChg_vars(
     df: pd.DataFrame, X_feature_sets, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1, ticker = None
@@ -455,7 +517,7 @@ def create_pctChg_vars(
     """
     df = df.copy()
 
-    feature_set = FeatureSet(scaling_method,"pctChg_vars", ticker = ticker)
+    feature_set = FeatureSet(scaling_method, "pctChg_vars", ticker=ticker)
 
     for cur_feature_set in X_feature_sets:
         for key in cur_feature_set.sub_categories:
@@ -523,7 +585,14 @@ def create_pctChg_vars(
 
     return df, feature_set
 
-def create_rolling_sum_vars(df: pd.DataFrame, col_name : str, rolling_sum_windows=(1, 2, 3, 4, 5, 6), scaling_method = ScalingMethod.QUANT_MINMAX_G, ticker = None ) -> (pd.DataFrame, FeatureSet):
+
+def create_rolling_sum_vars(
+    df: pd.DataFrame,
+    col_name: str,
+    rolling_sum_windows=(1, 2, 3, 4, 5, 6),
+    scaling_method=ScalingMethod.QUANT_MINMAX_G,
+    ticker=None,
+) -> (pd.DataFrame, FeatureSet):
     """
     Create rolling sum variables for the specified column.
 
@@ -538,10 +607,10 @@ def create_rolling_sum_vars(df: pd.DataFrame, col_name : str, rolling_sum_window
         raise ValueError("Column name must contain pctChg")
     if col_name not in df.columns:
         raise ValueError("Column name not in dataframe")
-    
+
     df = df.copy()
 
-    feature_set = FeatureSet(scaling_method,col_name + "_rolling",ticker=ticker)
+    feature_set = FeatureSet(scaling_method, col_name + "_rolling", ticker=ticker)
 
     for roll in rolling_sum_windows:
         new_col_name = "sum" + col_name + "_" + str(roll)
@@ -551,7 +620,8 @@ def create_rolling_sum_vars(df: pd.DataFrame, col_name : str, rolling_sum_window
     for col in feature_set.cols:
         df[col] = df[col].fillna(df[col].mean())
 
-    return df, feature_set 
+    return df, feature_set
+
 
 def create_weekday_month_cols(df):
     """
@@ -595,7 +665,12 @@ def create_quarter_cols(df):
     return df
 
 
-def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = ScalingMethod.QUANT_MINMAX, ticker = None) -> (pd.DataFrame, FeatureSet):
+def add_forward_rolling_sums(
+    df: pd.DataFrame,
+    columns: list,
+    scaling_method=ScalingMethod.QUANT_MINMAX,
+    ticker=None,
+) -> (pd.DataFrame, FeatureSet):
     """
     Add the y val for sumPctChgClCl_X for the next X periods. For example sumPctChgClCl_1
     is the percent change from today's close to tomorrow's close, sumPctChgClCl_2 is the percent
@@ -606,7 +681,7 @@ def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = S
     :param columns: a list of column names
     :return: the DataFrame with the new columns added
     """
-    feature_set = FeatureSet(scaling_method,"target_vars",ticker=ticker)
+    feature_set = FeatureSet(scaling_method, "target_vars", ticker=ticker)
 
     max_shift = -1
 
@@ -618,16 +693,12 @@ def add_forward_rolling_sums(df: pd.DataFrame, columns: list, scaling_method = S
         new_col_name = "sumPctChgclose+" + str(num_rows_ahead)
         feature_set.cols.append(new_col_name)
         # Shift the column values by -X to fetch the value X rows ahead
-    
+
         shifted_col = df[col].shift(-num_rows_ahead)
-
-
 
         df[new_col_name] = shifted_col
 
         max_shift = max(max_shift, num_rows_ahead)
-
-
 
     return df, feature_set
 
@@ -661,10 +732,11 @@ def create_lag_vars(
 
     return new_df
 
-def df_train_test_split(dataset, feature_list, train_percentage = 0.8):
-    '''
+
+def df_train_test_split(dataset, feature_list, train_percentage=0.8):
+    """
     Split the dataset into train and test sets
-    '''
+    """
     total_rows = len(dataset)
     train_rows = int(total_rows * train_percentage)
 
@@ -675,58 +747,64 @@ def df_train_test_split(dataset, feature_list, train_percentage = 0.8):
 
 
 class MinMaxPercentileScaler(BaseEstimator, TransformerMixin):
-    def __init__(self, percentile=[5, 95], scaling_mode='column'):
+    def __init__(self, percentile=[5, 95], scaling_mode="column"):
         """
-        Custom transformer that clips data to the defined percentiles and scales it between -1 and 1. 
+        Custom transformer that clips data to the defined percentiles and scales it between -1 and 1.
         This ensures the same number of values <, = and > zero are maintained.
-        scaling_mode can be 'column' or 'global'. 
+        scaling_mode can be 'column' or 'global'.
         """
         self.max_abs_trimmed_ = None
         self.percentile = percentile
         self.scaling_mode = scaling_mode
-    
+
     def fit(self, X, y=None):
         X_copy = X.copy() if isinstance(X, pd.DataFrame) else np.copy(X)
-        
-        if self.scaling_mode == 'column':
+
+        if self.scaling_mode == "column":
             low, high = np.percentile(X_copy, self.percentile, axis=0)
             self.max_abs_trimmed_ = np.maximum(np.abs(low), np.abs(high))
-        elif self.scaling_mode == 'global':
+        elif self.scaling_mode == "global":
             low, high = np.percentile(X_copy, self.percentile)
             self.max_abs_trimmed_ = np.maximum(np.abs(low), np.abs(high))
             if self.max_abs_trimmed_ == 0:
                 print("Warning: Global max absolute trimmed value is zero.")
         else:
-            raise ValueError("Invalid scaling_mode. Choose either 'column' or 'global'.")
+            raise ValueError(
+                "Invalid scaling_mode. Choose either 'column' or 'global'."
+            )
         return self
 
     def transform(self, X):
         X_copy = X.copy() if isinstance(X, pd.DataFrame) else np.copy(X)
-        
-        if self.scaling_mode == 'column':
+
+        if self.scaling_mode == "column":
             # Clip data column-wise
             X_copy = np.clip(X_copy, -self.max_abs_trimmed_, self.max_abs_trimmed_)
             pos_mask = X_copy > 0
             neg_mask = X_copy < 0
             X_copy[pos_mask] = X_copy[pos_mask] / self.max_abs_trimmed_
             X_copy[neg_mask] = X_copy[neg_mask] / self.max_abs_trimmed_
-        elif self.scaling_mode == 'global':
+        elif self.scaling_mode == "global":
             # Clip data globally
             X_copy = np.clip(X_copy, -self.max_abs_trimmed_, self.max_abs_trimmed_)
             X_copy = X_copy / self.max_abs_trimmed_
         else:
-            raise ValueError("Invalid scaling_mode. Choose either 'column' or 'global'.")
-            
+            raise ValueError(
+                "Invalid scaling_mode. Choose either 'column' or 'global'."
+            )
+
         return X_copy
-    
+
     def inverse_transform(self, X):
         X_copy = X.copy() if isinstance(X, pd.DataFrame) else np.copy(X)
 
-        if self.scaling_mode == 'column':
+        if self.scaling_mode == "column":
             X_copy = X_copy * self.max_abs_trimmed_
-        elif self.scaling_mode == 'global':
+        elif self.scaling_mode == "global":
             X_copy = X_copy * self.max_abs_trimmed_
         else:
-            raise ValueError("Invalid scaling_mode. Choose either 'column' or 'global'.")
-        
+            raise ValueError(
+                "Invalid scaling_mode. Choose either 'column' or 'global'."
+            )
+
         return X_copy

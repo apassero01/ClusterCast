@@ -10,6 +10,7 @@ admin.site.register(CP.StockCluster)
 admin.site.register(CP.SupportedParams)
 admin.site.register(RM.StepResult)
 admin.site.register(RM.RNNModel)
+admin.site.register(RM.ModelPrediction)
 admin.site.register(Pred.StockPrediction)
 admin.site.register(Pred.StockForcastTimeline)
 

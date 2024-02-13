@@ -26,18 +26,76 @@ function renderVisualization(data) {
 
         // Iterate over each data result pair
         data.forEach((dict,index) => {
-            const {figs, metrics, model_config, model_stats} = dict;
+            const {figs, metrics, model_config, model_stats, cluster_id} = dict;
+            const pathName = window.location.pathname;
+
+            // Split the pathname by '/' and filter out any empty strings
+            const pathSegments = pathName.split('/').filter(segment => segment);
+            const group_id = pathSegments[pathSegments.length - 1];
+
+
+            let cluster_container = document.createElement('div');
+            cluster_container.classList.add('cluster-container');
+
+            let button_container = document.createElement('div');
+            button_container.classList.add('button-container');
 
             // Create the container for the graph-text pair
             let pairContainer = document.createElement('div');
             pairContainer.classList.add('graph-text-pair-container');
-            
+
+            cluster_container.appendChild(button_container);
+            cluster_container.appendChild(pairContainer);
+
             graphStatsContainer = document.createElement('div');
             graphStatsContainer.classList.add('graph-stats-container');
 
+            let viewClusterButton = document.createElement('button');
+            viewClusterButton.innerHTML = "View Cluster";
+            viewClusterButton.classList.add('view-cluster-button');
+            viewClusterButton.addEventListener('click', function() {
+                window.location.href = `/cluster/${group_id}/${cluster_id}/`;
+            });
+            button_container.appendChild(viewClusterButton);
+
+            let train_new_model_button = document.createElement('button');
+            train_new_model_button.innerHTML = "Train New Model";
+            train_new_model_button.classList.add('train-new-model-button');
+            train_new_model_button.addEventListener('click', function() {
+                // Send post request to train new model
+                fetch(`/cluster/${group_id}/${cluster_id}/train-models/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        'group_id': group_id,
+                        'cluster_id': cluster_id
+                    })
+                })
+            });
+            button_container.appendChild(train_new_model_button);
+ 
+            if (metrics === null) {
+
+                figs.forEach(fig => {
+                // Create the container for the graph
+                let graphContainer = document.createElement('div');
+                graphContainer.classList.add('graph-container');
+
+                // Append the graph container to the pair container
+                pairContainer.appendChild(graphContainer);
+
+                // Render the figure using Plotly
+                Plotly.newPlot(graphContainer, fig.data, fig.layout, {responsive: true});
             
-            
-            console.log(model_stats)
+                });
+
+                dataVisualizationContainer.appendChild(cluster_container);
+   
+                return;
+            }
+
             if (Object.keys(model_stats).length > 0) {
                 const epochs = model_stats.effective_epochs;
                 const error = model_stats.error;
@@ -55,7 +113,8 @@ function renderVisualization(data) {
             }
 
             graphStatsContainer.appendChild(pairContainer);
-            dataVisualizationContainer.appendChild(graphStatsContainer);
+            cluster_container.appendChild(graphStatsContainer);
+            dataVisualizationContainer.appendChild(cluster_container);
 
 
             figs.forEach(fig => {
@@ -85,6 +144,10 @@ function populateTextDataContainer(results,model_config,pairContainer,index) {
     let textContainer = document.createElement('div');
     textContainer.classList.add('text-data-container');
 
+    if (results === undefined) {
+        textContainer.textContent = 'No results to display';
+        return;
+    }
     // Display summary in a single line
     let summary = `Train length: ${results.train_set_length} | Test length: ${results.test_set_length} | Cluster Number: ${results.cluster_label}`;
     let summaryP = document.createElement('p');

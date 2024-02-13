@@ -52,7 +52,6 @@ class Migration(migrations.Migration):
                     models.FileField(
                         blank=True,
                         null=True,
-                        upload_to=ClusterPipeline.models.Predictions.forcast_timeline_directory_path,
                     ),
                 ),
             ],
