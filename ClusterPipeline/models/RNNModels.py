@@ -523,7 +523,9 @@ class ModelPrediction(models.Model):
         RNNModel, on_delete=models.CASCADE, related_name="rnn_model_predictions"
     )
     stock_prediction = models.ForeignKey(
-        "StockPrediction", on_delete=models.CASCADE, related_name="stock_model_predictions"
+        "StockPrediction",
+        on_delete=models.CASCADE,
+        related_name="stock_model_predictions",
     )
     predicted_values = models.JSONField(default=list, blank=True)
     prediction_dates = models.JSONField(default=list, blank=True)
@@ -541,15 +543,19 @@ class ModelPrediction(models.Model):
         self.cluster_id = self.rnn_model.cluster.pk
         self.group_id = self.rnn_model.cluster.cluster_group.pk
         step_results = list(StepResult.objects.filter(RNNModel=self.rnn_model))
-        filtered_predicted_values = [step.dir_accuracy for step, pred in zip(step_results, self.predicted_values) if pred is not None]
+        filtered_predicted_values = [
+            step.dir_accuracy
+            for step, pred in zip(step_results, self.predicted_values)
+            if pred is not None
+        ]
         self.filtered_accuracy = statistics.mean(filtered_predicted_values)
         self.effective_epochs = self.rnn_model.model_metrics["effective_epochs"]
         self.start_date = self.prediction_dates[0]
         self.end_date = self.prediction_dates[-1]
-    
+
     def create_model_pred_dict(self):
         model_dict = {
-            "model_prediction_id": self.pk, 
+            "model_prediction_id": self.pk,
             "model_id": self.rnn_model.pk,
             "stock_prediction_id": self.stock_prediction.pk,
             "group_id": self.group_id,
@@ -562,9 +568,8 @@ class ModelPrediction(models.Model):
             "predicted_dates": self.prediction_dates,
             "prev_day_price": self.prev_day_price,
             "status": self.status,
-
         }
         return model_dict
 
-    def update_prediction(self, model_pred_dict): 
+    def update_prediction(self, model_pred_dict):
         self.status = model_pred_dict["status"]
