@@ -142,7 +142,7 @@
         .cluster-container {
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: left;
             width: 100%;
             margin: 10px 0;
         }
@@ -249,7 +249,7 @@
                 document.addEventListener('DOMContentLoaded', function() {
                     dates = JSON.parse(`{{ dates|safe }}`);
                     closeDfAll = JSON.parse(`{{ close_df|safe }}`);
-                    closeDf = closeDfAll.data.slice(-20);
+                    closeDf = closeDfAll.data.slice(-50);
                     visualizeFuturePredictions(stock_predictions, closeDfAll);
                 });
             </script>
@@ -353,16 +353,40 @@
         const medianPredictions = Object.values(predictionStats).map(stat => stat.median);
         const iq1Predictions = Object.values(predictionStats).map(stat => stat.median - stat.iqr);
         const iq3Predictions = Object.values(predictionStats).map(stat => stat.median + stat.iqr);
-        console.log(medianPredictions)
+        console.log(predictionStats)
 
         // For percentChange calculation, ensure 'closePrices' is an array of numbers and has at least one price
         const lastClosePrice = closePrices[closePrices.length - 1]; // Get the last close price just once to use in calculation
         const percentChange = Object.values(predictionStats).map(stat => ((stat.median - closePrices.slice(-1)) / closePrices.slice(-1)) * 100);
-        
-        predictionDates = predictionDates.map(date => date.split(' ')[0])
-        
+
         const allDates = Array.from(new Set([...closingDates, ...predictionDates])).sort();
-        predictionDates.sort();
+        const allDatesTrimmed = allDates.map(date => date.split(' ')[0]);
+        
+        let closePricesAligned = new Array(allDates.length).fill(null);
+        let medianPredictionsAligned = new Array(allDates.length).fill(null);
+        let iq1PredictionsAligned = new Array(allDates.length).fill(null);
+        let iq3PredictionsAligned = new Array(allDates.length).fill(null);
+
+        closingDates.forEach((date, i) => {
+            const index = allDates.indexOf(date);
+            console.log(index)
+            console.log(date)
+            if (index !== -1) {
+                closePricesAligned[index] = closePrices[i];
+            }
+        });
+
+        console.log(closePricesAligned)
+
+        predictionDates.forEach(date => {
+            const position = allDates.indexOf(date);
+            if (position !== -1 && predictionStats[date] !== undefined) {
+                medianPredictionsAligned[position] = predictionStats[date].median;
+                iq1PredictionsAligned[position] = predictionStats[date].median - predictionStats[date].iqr;
+                iq3PredictionsAligned[position] = predictionStats[date].median + predictionStats[date].iqr;
+            }
+        });
+        
 
         if (predictionDates.length === 0) {
             const closingPricesTrace = {
@@ -377,8 +401,8 @@
                 xaxis: {
                     title: 'Date',
                     type: 'category',  // Specify x-axis as categorical
-                    tickvals: allDates,
-                    ticktext: allDates,
+                    tickvals: allDatesTrimmed,
+                    ticktext: allDatesTrimmed,
                     tickangle: -45  // Optional: Adjust for better label visibility
                 },
                 yaxis: { title: 'Price' },
@@ -396,15 +420,15 @@
         }
 
         closingPricesTrace = {
-            x: closingDates,
-            y: closePrices,
+            x: allDatesTrimmed,
+            y: closePricesAligned,
             mode: 'lines+markers',
             name: 'Closing Prices'
         };
 
         const predictionDatesTrace = {
-            x: predictionDates,
-            y: medianPredictions,
+            x: allDatesTrimmed,
+            y: medianPredictionsAligned,
             mode: 'lines+markers',
             name: 'Median Predictions',
             line: { color: 'red' }
@@ -412,8 +436,8 @@
 
             // Create IQR traces
         const iq1Trace = {
-            x: predictionDates,
-            y: iq1Predictions,
+            x: allDatesTrimmed,
+            y: iq1PredictionsAligned,
             fill: 'none',
             mode: 'lines',
             line: { color: 'lightgreen' },
@@ -421,8 +445,8 @@
         };
 
         const iq3Trace = {
-            x: predictionDates,
-            y: iq3Predictions,
+            x: allDatesTrimmed,
+            y: iq3PredictionsAligned,
             fill: 'tonexty',
             mode: 'lines',
             line: { color: 'lightgreen' },
@@ -431,8 +455,8 @@
 
         const annotations = predictionDates.map((date, i) => {
             return {
-                x: predictionDates[i],
-                y: medianPredictions[i],
+                x: allDatesTrimmed[i],
+                y: medianPredictionsAligned[i],
                 text: `${percentChange[i].toFixed(2)}%`,
                 xshift: 5,  // horizontal shift (in pixels)
                 yshift: 20, // vertical shift (in pixels)
@@ -447,8 +471,8 @@
             xaxis: {
                 title: 'Date',
                 type: 'category',  // Specify x-axis as categorical
-                tickvals: allDates,
-                ticktext: allDates,
+                tickvals: allDatesTrimmed,
+                ticktext: allDatesTrimmed,
                 tickangle: -45  // Optional: Adjust for better label visibility
             },
             yaxis: { title: 'Price' },
@@ -456,21 +480,30 @@
             annotations: annotations  // Assuming annotations are already defined
         };
 
-        const data = [closingPricesTrace, predictionDatesTrace,iq1Trace,iq3Trace]; // Add more traces as needed
+        const data = [closingPricesTrace, predictionDatesTrace, iq1Trace, iq3Trace]; // Add more traces as needed
 
         if (document.querySelector('.active-prediction-button')) {
             const date = document.querySelector('.active-prediction-button').textContent;
             const active_prediction = stock_predictions.find(prediction => prediction.prediction_start_date.split(' ')[0] === date);
             const organized_active = OrganizePredictions([active_prediction], dates);
             const active_stats = processPredictionData(organized_active);
-            let active_dates = Object.keys(organized_active).map(key => key.split(' ')[0]).sort();
+            let active_dates = Object.keys(organized_active).map(key => key);
             const active_median = Object.values(active_stats).map(stat => stat.median);
             console.log(active_median)
 
+            activeMedianAligned = new Array(allDates.length).fill(null);
+
+            active_dates.forEach(date => {
+                const position = allDates.indexOf(date);
+                if (position !== -1 && active_stats[date] !== undefined) {
+                    activeMedianAligned[position] = active_stats[date].median;
+                }
+            });
+
 
             const active_prediction_dates_trace = {
-                x: active_dates,
-                y: active_median,
+                x: allDates,
+                y: activeMedianAligned,
                 mode: 'lines+markers',
                 name: 'Median Predictions',
                 line: { color: 'purple' }

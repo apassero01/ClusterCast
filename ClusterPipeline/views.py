@@ -24,7 +24,8 @@ import yfinance as yf
 @csrf_exempt
 @transaction.atomic
 def home(request):
-    return render(request, 'ClusterPipeline/home.html')
+    return render(request, "ClusterPipeline/home.html")
+
 
 @csrf_exempt
 @transaction.atomic
@@ -217,6 +218,7 @@ def cluster_detail(request, group_id, cluster_id):
         request, "ClusterPipeline/cluster_detail.html", {"results": model_results}
     )
 
+
 @csrf_exempt
 def train_new_models(request, group_id, cluster_id):
     cluster_group = get_cluster_group(group_id)
@@ -249,7 +251,7 @@ def prediction_detail(request, prediction_id):
         prediction.save()
 
         return JsonResponse({"success": True})
-    
+
     groups = CP.StockClusterGroup.objects.all()
     tickers = []
     for group in groups:
@@ -279,7 +281,16 @@ def prediction_detail(request, prediction_id):
         request,
         "ClusterPipeline/forcast_detail.html",
         {
-            "stock_predictions": json.dumps([{'prediction_id': prediction.pk,  'start_date' : prediction.prediction_start_date.strftime("%Y-%m-%d")}]),
+            "stock_predictions": json.dumps(
+                [
+                    {
+                        "prediction_id": prediction.pk,
+                        "start_date": prediction.prediction_start_date.strftime(
+                            "%Y-%m-%d"
+                        ),
+                    }
+                ]
+            ),
             "pred_df": pred_df_json,
             "close_df": close_df_json,
             "tickers": tickers,
@@ -329,22 +340,27 @@ def forcast(request):
             prediction_end_date = datetime.strptime(prediction_end_date, "%Y-%m-%d")
 
             if (
-                prediction_start_date
-                < forcast_timeline.prediction_start_date
-                or prediction_end_date
-                > forcast_timeline.prediction_end_date
+                prediction_start_date < forcast_timeline.prediction_start_date
+                or prediction_end_date > forcast_timeline.prediction_end_date
             ):
                 forcast_timeline.add_prediction_range(
                     start_date=prediction_start_date,
                     end_date=prediction_end_date,
-                    total_model_accuracy_thresh=40,
-                    individual_model_accuracy_thresh=40,
-                    epochs_threshold=1,
+                    total_model_accuracy_thresh=60,
+                    individual_model_accuracy_thresh=65,
+                    epochs_threshold=20,
                 )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk
 
-            return redirect("forcast_detail", forcast_id=forcast_id)
+            return redirect(
+                "forcast_detail",
+                forcast_id=forcast_id,
+                prediction_start_date=datetime.strftime(
+                    prediction_start_date, "%Y-%m-%d"
+                ),
+                prediction_end_date=datetime.strftime(prediction_end_date, "%Y-%m-%d"),
+            )
         else:
             print("prediction does not exist")
 
@@ -359,20 +375,25 @@ def forcast(request):
             forcast_timeline.add_prediction_range(
                 start_date=prediction_start_date,
                 end_date=prediction_end_date,
-                total_model_accuracy_thresh=40,
-                individual_model_accuracy_thresh=40,
-                epochs_threshold=1,
+                total_model_accuracy_thresh=60,
+                individual_model_accuracy_thresh=65,
+                epochs_threshold=20,
             )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk
 
-        return redirect("forcast_detail", forcast_id=forcast_id)
+        return redirect(
+            "forcast_detail",
+            forcast_id=forcast_id,
+            prediction_start_date=datetime.strftime(prediction_start_date, "%Y-%m-%d"),
+            prediction_end_date=datetime.strftime(prediction_end_date, "%Y-%m-%d"),
+        )
 
     return render(request, "ClusterPipeline/predictions.html", {"tickers": tickers})
 
 
 @csrf_exempt
-def forcast_detail(request, forcast_id):
+def forcast_detail(request, forcast_id, prediction_start_date, prediction_end_date):
     """
     View/Controller for the prediction detail page. The processing for the predictions has been
     completed at this point so we are simply retreiving and passing along the dataframe here
@@ -388,7 +409,10 @@ def forcast_detail(request, forcast_id):
         forcast.rebuild_predictions(stock_predictions)
 
         return JsonResponse({"success": True})
-    
+
+    prediction_start_date = datetime.strptime(prediction_start_date, "%Y-%m-%d")
+    prediction_end_date = datetime.strptime(prediction_end_date, "%Y-%m-%d")
+
     groups = CP.StockClusterGroup.objects.all()
     tickers = []
     for group in groups:
@@ -404,18 +428,20 @@ def forcast_detail(request, forcast_id):
         start_date=start_date, end_date=date.today().strftime("%Y-%m-%d")
     )
 
-    dates, model_prediction_output = forcast.create_prediction_output()
+    dates, model_prediction_output = forcast.create_prediction_output(
+        prediction_start_date, prediction_end_date
+    )
 
     close_df = yf.download(
         prediction.ticker,
-        start=start_date,
+        start=prediction_start_date.strftime("%Y-%m-%d"),
         end=(date.today() + timedelta(days=1)).strftime("%Y-%m-%d"),
         interval=prediction.interval,
     )
 
     close_df = close_df[["Close"]].reset_index()
     close_df = close_df.rename(columns={"Close": "close"})
-    close_df['Date'] = close_df['Date'].dt.strftime('%Y-%m-%d')
+    close_df["Date"] = close_df["Date"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     close_df_json = close_df.to_json(orient="split", date_format="iso")
 
@@ -430,40 +456,41 @@ def forcast_detail(request, forcast_id):
             "prediction_id": forcast_id,
             "ticker": prediction.ticker,
             "interval": prediction.interval,
-            "prediction_start_date": prediction.prediction_start_date.strftime(
-                "%Y-%m-%d"
-            ),
+            "prediction_start_date": prediction_start_date.strftime("%Y-%m-%d"),
+            "prediction_end_date": prediction_end_date.strftime("%Y-%m-%d"),
         },
     )
+
 
 def get_prediction_vis_files(request, prediction_id):
     """
     End point to return the cluster visualization files saved for a specific prediction
     """
-    try: 
+    try:
         prediction = Pred.StockPrediction.objects.get(pk=prediction_id)
     except Pred.StockPrediction.DoesNotExist:
-        return JsonResponse({'error': 'Prediction not found'}, status=404)
-    
-    prediction_dir = os.path.join(prediction.dir_path, 'clusters')
+        return JsonResponse({"error": "Prediction not found"}, status=404)
+
+    prediction_dir = os.path.join(prediction.dir_path, "clusters")
 
     if not os.path.exists(prediction_dir):
-        return JsonResponse({'error': 'Prediction not found'}, status=404)
-    
+        return JsonResponse({"error": "Prediction not found"}, status=404)
+
     files_data = {}
     for filename in os.listdir(prediction_dir):
         if filename.endswith(".html"):
-            cluster_id = filename.replace('cluster-', '').replace('.html', '')
+            cluster_id = filename.replace("cluster-", "").replace(".html", "")
             with open(os.path.join(prediction_dir, filename)) as f:
                 files_data[cluster_id] = f.read()
-    
+
     return JsonResponse(files_data)
 
+
 def get_models(request, model_ids):
-    '''
+    """
     Method to retreive all of the models in list of model_ids
-    '''
-    model_ids = model_ids.split(',')
+    """
+    model_ids = model_ids.split(",")
     models = RNN.RNNModel.objects.filter(pk__in=model_ids)
     model_results = []
     for model in models:

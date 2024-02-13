@@ -99,9 +99,10 @@ class StockPrediction(Prediction):
         print([group_params.id for group_params in all_group_params])
         all_groups = [
             StockClusterGroup.objects.get(group_params=group_params)
-            for group_params in all_group_params if group_params.id not in self.cluster_group_params
+            for group_params in all_group_params
+            if group_params.id not in self.cluster_group_params
         ]
-        all_rnn_predictions = [] 
+        all_rnn_predictions = []
         for cluster_group in all_groups:
             try:
                 cluster_group.load_saved_group()
@@ -121,7 +122,10 @@ class StockPrediction(Prediction):
             self.cluster_group_params.append(cluster_group.group_params.id)
 
             for rnn_prediction in rnn_predictions:
-                if self.final_prediction_date is None or rnn_prediction.end_date > self.final_prediction_date:
+                if (
+                    self.final_prediction_date is None
+                    or rnn_prediction.end_date > self.final_prediction_date
+                ):
                     self.final_prediction_date = rnn_prediction.end_date
 
         return all_rnn_predictions
@@ -250,9 +254,13 @@ class StockPrediction(Prediction):
 
                 print("Daily Accuracy")
                 print(daily_accuracy)
-                formatted_dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in future_dates]
-                
-                rnn_prediction = model.create_prediction(price_predictions, formatted_dates, self, end_day_close)
+                formatted_dates = [
+                    date.strftime("%Y-%m-%d %H:%M:%S") for date in future_dates
+                ]
+
+                rnn_prediction = model.create_prediction(
+                    price_predictions, formatted_dates, self, end_day_close
+                )
                 rnn_predictions.append(rnn_prediction)
 
                 num_preds += 1
@@ -451,7 +459,6 @@ class StockPrediction(Prediction):
 
         return seq[:, indices]
 
-
     def visualize_current_and_cluster(self, cluster, X_cluster, cluster_features):
         # Create a subplot with 1 row and 2 columns
         subplots_fig = make_subplots(
@@ -508,8 +515,6 @@ class StockPrediction(Prediction):
 
         return subplots_fig
 
-
-
     def save_cluster_visualization(self, fig, cluster_id):
         """
         Saves the plotly figure to disk
@@ -527,29 +532,36 @@ class StockPrediction(Prediction):
         fig = go.Figure()
         fig = fig.from_html(file_path)
         return fig
-    
-    def create_prediction_output(self):  
+
+    def create_prediction_output(self):
         """
         Generate the json object from all model predictions for the forcast timeline frontend
         """
 
-        model_predictions = list(self.stock_model_predictions.all().order_by('start_date'))
+        model_predictions = list(
+            self.stock_model_predictions.all().order_by("start_date")
+        )
 
-        dates = pd.date_range(self.prediction_start_date, self.final_prediction_date, freq=self.market_calendar).tolist()
+        dates = pd.date_range(
+            self.prediction_start_date,
+            self.final_prediction_date,
+            freq=self.market_calendar,
+        ).tolist()
         dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
 
-        model_prediction_output = [] 
+        model_prediction_output = []
         for model_prediction in model_predictions:
             model_prediction_output.append(model_prediction.create_model_pred_dict())
 
         return dates, model_prediction_output
-    
+
     def rebuild_predictions(self, model_prediction_output):
-        for pred_output in model_prediction_output: 
-            model_prediction = ModelPrediction.objects.get(pk = pred_output['model_prediction_id'])
+        for pred_output in model_prediction_output:
+            model_prediction = ModelPrediction.objects.get(
+                pk=pred_output["model_prediction_id"]
+            )
             model_prediction.update_prediction(pred_output)
             model_prediction.save()
-
 
 
 class ForcastTimeline(models.Model):
@@ -598,10 +610,12 @@ class StockForcastTimeline(ForcastTimeline):
 
             self.prediction_end_date = self.prediction_dates[-1]
             self.prediction_start_date = self.prediction_dates[0]
-            self.final_prediction_date = self.stock_predictions[-1].final_prediction_date
+            self.final_prediction_date = self.stock_predictions[
+                -1
+            ].final_prediction_date
         else:
             self.prediction_dates = []
-        
+
         self.save()
 
     def add_prediction_range(
@@ -658,39 +672,63 @@ class StockForcastTimeline(ForcastTimeline):
 
         for i in range(len(self.stock_predictions) - 1, 0, -1):
             if self.stock_predictions[i].final_prediction_date is not None:
-                self.final_prediction_date = self.stock_predictions[i].final_prediction_date
+                self.final_prediction_date = self.stock_predictions[
+                    i
+                ].final_prediction_date
                 break
-    
-    def create_prediction_output(self):
+
+    def create_prediction_output(self, prediction_start_date, prediction_end_date):
         """
         Generate the json object from all model predictions for the forcast timeline frontend
         """
 
         if len(self.stock_predictions) == 0 or self.final_prediction_date is None:
             return [], []
-        
+
         model_predictions_output = []
-        
+
         print(self.market_calendar)
-        dates = pd.date_range(start = self.prediction_start_date, end = self.final_prediction_date, freq=self.market_calendar).tolist()
+        dates = pd.date_range(
+            start=self.prediction_start_date,
+            end=self.final_prediction_date,
+            freq=self.market_calendar,
+        ).tolist()
         dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
-        
+
         for stock_prediction in self.stock_predictions:
+            if (
+                stock_prediction.prediction_start_date < prediction_start_date
+                or stock_prediction.prediction_start_date > prediction_end_date
+            ):
+                continue
             stock_prediction.initialize()
-            cur_dates, model_prediction_output = stock_prediction.create_prediction_output()
-            model_predictions_output.append({'prediction_id': stock_prediction.id, 
-                                            'prediction_start_date': stock_prediction.prediction_start_date.strftime("%Y-%m-%d %H:%M:%S"), 
-                                            'prediction_end_date': stock_prediction.final_prediction_date.strftime("%Y-%m-%d %H:%M:%S"),
-                                            'results': model_prediction_output})
-        
+            (
+                cur_dates,
+                model_prediction_output,
+            ) = stock_prediction.create_prediction_output()
+            model_predictions_output.append(
+                {
+                    "prediction_id": stock_prediction.id,
+                    "prediction_start_date": stock_prediction.prediction_start_date.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "prediction_end_date": stock_prediction.final_prediction_date.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "results": model_prediction_output,
+                }
+            )
+
         return dates, model_predictions_output
-    
+
     def rebuild_predictions(self, model_predictions_output):
-        for pred_output in model_predictions_output: 
-            stock_prediction = StockPrediction.objects.get(pk = pred_output['prediction_id'])
-            stock_prediction.rebuild_predictions(pred_output['results'])
+        for pred_output in model_predictions_output:
+            stock_prediction = StockPrediction.objects.get(
+                pk=pred_output["prediction_id"]
+            )
+            stock_prediction.rebuild_predictions(pred_output["results"])
             stock_prediction.save()
-        
+
 
 @receiver(post_delete, sender=StockPrediction)
 def submission_delete(sender, instance, **kwargs):
