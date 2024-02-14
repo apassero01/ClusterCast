@@ -252,6 +252,11 @@ class StockDataSet(DataSet):
             )
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
+        
+        self.df, feature_set = create_rolling_sum_vars(self.df, 'pctChgclose', scaling_method=self.scaling_dict['rolling_vars'],ticker = self.ticker,rolling_sum_windows=[7,8,9,10,11,12,13,14,15])
+        self.X_feature_sets.append(feature_set)
+        X_cols.update(feature_set.cols)
+        
 
         # Update the group params with the new  columns
         self.group_params.X_cols.update(X_cols)
@@ -320,19 +325,36 @@ class StockDataSet(DataSet):
         """
         if self.created_y_targets:
             return
+        
+        rolling_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6','sumpctChgclose_7','sumpctChgclose_8','sumpctChgclose_9','sumpctChgclose_10','sumpctChgclose_11','sumpctChgclose_12','sumpctChgclose_13','sumpctChgclose_14','sumpctChgclose_15']
 
-        self.df, feature_set = add_forward_rolling_sums(
-            self.df,
-            cols_to_create_targets,
-            scaling_method=self.scaling_dict["target_vars"],
-            ticker=self.ticker,
-        )
+        
+        self.df, feature_set = add_forward_rolling_sums(self.df, rolling_features, scaling_method=self.scaling_dict['target_vars'],ticker=self.ticker)
 
         self.y_feature_sets.append(feature_set)
         self.group_params.y_cols.update(feature_set.cols)
-        self.created_y_targets = True
 
-    def strong_predictors_rf(self, num_features=10):
+        # print(self.df.columns.tolist())
+
+        self.df, feature_set = create_lag_vars(self.df, ['pctChgclose'], start_lag = -6, end_lag = -1, ticker = self.ticker)
+        self.y_feature_sets.append(feature_set)
+        self.group_params.y_cols.update(feature_set.cols)
+        self.df, feature_set = create_lag_vars(self.df, ['pctChgclose'], start_lag = 0, end_lag = 15, ticker = self.ticker)
+        print(feature_set.cols)
+        self.y_feature_sets.append(feature_set)
+        self.group_params.y_cols.update(feature_set.cols)
+
+        
+
+        # print("FUCK")
+        # print(self.df.columns.tolist())
+
+        print(self.df[sorted(list(self.group_params.y_cols))].tail(20))
+
+        self.created_y_targets = True 
+
+
+    def strong_predictors_rf(self, num_features = 10): 
         """
         Use a random forest regressor to determine the most important features
         """
@@ -736,7 +758,7 @@ def add_forward_rolling_sums(
 
 
 def create_lag_vars(
-    df: pd.DataFrame, cols_to_create_lags: list, start_lag, end_lag
+    df: pd.DataFrame, cols_to_create_lags: list, start_lag, end_lag, ticker = None, scaling_method = ScalingMethod.QUANT_MINMAX
 ) -> list:
     """
     Create a DataFrame of lag variables
@@ -747,26 +769,39 @@ def create_lag_vars(
     :param end_lag: end lag (inclusive, default = 1)
     :return: a list of the new lag variable column names
     """
+    df = df.copy()
 
-    new_cols = {}
+    feature_set = FeatureSet(scaling_method=scaling_method, name = "lag_target_vars", ticker = ticker)
 
+    df_lags = pd.DataFrame(index=df.index)
     for lag in range(start_lag, end_lag + 1):
         for var in cols_to_create_lags:
-            if lag >= 1:
-                col = var + "-" + str(lag)
-                new_cols[col] = df[var].shift(lag)
+            if lag >= 0:
+                df_lags[var + "-" + str(lag)] = pd.Series(df[var].shift(lag),
+                                                        index=df.index[(lag):])
+                # replace nans with mean in this col
+                df_lags[var + "-" + str(lag)] = df_lags[var + "-" + str(lag)].fillna(df_lags[var + "-" + str(lag)].mean())
             elif lag <= -1:
-                col = var + "+" + str(-lag)
-                new_cols[col] = df[var].shift(lag)
+                df_lags[var + "+" + str(lag * -1)] = pd.Series(df[var].shift(lag),
+                                                            index=df.index[:(lag)])
 
-    # Convert new columns to a new DataFrame
-    new_df = pd.DataFrame(new_cols)
+    # Reverse the columns if shifting ahead
+    if start_lag < 0:
+        x = list(df_lags.columns)
+        x.reverse()
+        df_lags = df_lags[x]
+
+    # concat the new DataFrame to the original DataFrame
+    df = pd.concat([df, df_lags], axis=1)
+
+    print(df_lags.columns.tolist())
+
+    feature_set.cols = df_lags.columns.tolist()
 
     return new_df
 
-
-def df_train_test_split(dataset, feature_list, train_percentage=0.8):
-    """
+def df_train_test_split(dataset, feature_list, train_percentage = 0.8):
+    '''
     Split the dataset into train and test sets
     """
     total_rows = len(dataset)

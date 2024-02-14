@@ -886,6 +886,12 @@ class StockCluster(Cluster):
             return
 
         model_params = self.cluster_group.group_params.model_params
+        
+        model_params = self.cluster_group.group_params.model_params 
+
+        target_features = self.cluster_group.group_params.target_cols
+        y_train_filtered = self.cluster_group.filter_y_by_features(self.y_train, target_features, self.y_feature_dict)
+        y_test_filtered = self.cluster_group.filter_y_by_features(self.y_test, target_features, self.y_feature_dict)
 
         num_models = 0
         self.models = []
