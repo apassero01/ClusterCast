@@ -414,8 +414,8 @@ class StockClusterGroup(ClusterGroup):
 
         if alg == "TSKM":
             # n_clusters = self.determine_n_clusters(X_train_cluster,metric)
-            n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
-            # n_clusters = 1
+            # n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
+            n_clusters = 1
             self.cluster_alg = TimeSeriesKMeans(
                 n_clusters=n_clusters, metric=metric, random_state=3
             )
@@ -543,7 +543,7 @@ class StockClusterGroup(ClusterGroup):
 
         for cluster in self.clusters:
             cluster.train_rnn(
-                model_features, model, self.group_params.feature_sample_num
+                model_features, model, self.group_params.feature_sample_num, self.group_params.feature_sample_size
             )
             self.filtered_clusters.append(cluster)
             cluster.save()
@@ -892,8 +892,9 @@ class StockCluster(Cluster):
 
         for i in range(num_feauture_iterations):
             features = self.random_sample_features(
-                sample_size, model_features, self.group_params.strong_predictors
+                sample_size, model_features, self.cluster_group.group_params.strong_predictors
             )
+            print("Features: ", features)
             X_train_filtered = self.cluster_group.filter_by_features(
                 self.X_train, features, self.X_feature_dict
             )
@@ -998,7 +999,7 @@ class StockCluster(Cluster):
 
         return self.best_model_idx
 
-    def hard_filter_models(self, accuracy_threshold=60, epoch_threshold=7):
+    def hard_filter_models(self, accuracy_threshold=50, epoch_threshold=5):
         """
         Method to filter the models based on a dictionary of filters
         """

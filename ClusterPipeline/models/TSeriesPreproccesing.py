@@ -235,7 +235,7 @@ class StockDataSet(DataSet):
 
         # Create percent change variables
         self.df, feature_set = create_pctChg_vars(
-            self.df, scaling_method=self.scaling_dict["pctChg_vars"], ticker=self.ticker
+            self.df, self.X_feature_sets, scaling_method=self.scaling_dict["pctChg_vars"], ticker=self.ticker
         )
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
@@ -426,6 +426,10 @@ def create_price_vars(
         df["ema" + str(length)] = ta.ema(df.close, length=length)
         price_feature_set.cols.append("sma" + str(length))
         price_feature_set.cols.append("ema" + str(length))
+        ma_cols.append("sma" + str(length))
+        ma_cols.append("ema" + str(length))
+    
+    price_feature_set.sub_categories['ma'] = ma_cols
 
 
     # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
@@ -489,6 +493,20 @@ def create_trend_vars(
     for col in feature_set.cols:
         df[col] = df[col].fillna(df[col].mean())
 
+    ma_cols = []
+    for length in [5, 10, 20, 50]:
+        df["volSma" + str(length)] = ta.sma(df.volume, length=length)
+        df["volEma" + str(length)] = ta.ema(df.volume, length=length)
+        ma_cols.append("volSma" + str(length))
+        ma_cols.append("volEma" + str(length))
+    feature_set.cols += ma_cols
+    feature_set.sub_categories['volMa'] = ma_cols
+
+    all_cols = feature_set.cols
+
+    for col in all_cols:
+        df[col] = df[col].fillna(method="bfill")
+
     return df, feature_set
 
 
@@ -519,26 +537,41 @@ def create_pctChg_vars(
 
     feature_set = FeatureSet(scaling_method, "pctChg_vars", ticker=ticker)
 
-    for cur_feature_set in X_feature_sets:
-        for key in cur_feature_set.sub_categories:
-            cur_cols = cur_feature_set.sub_categories[key]
-            for col in cur_cols:
-                df['pctChg' + col] = df[col].pct_change() * 100.0
-                feature_set.cols.append('pctChg' + col)
+    price_feature_set = [feature_set for feature_set in X_feature_sets if feature_set.name == 'price_vars'][0]
+    volume_feature_set = [feature_set for feature_set in X_feature_sets if feature_set.name == 'trend_vars'][0]
+
+    feature_set.sub_categories['ohlc'] = []
+    for col in price_feature_set.sub_categories['ohlc']:
+        new_col = 'pctChg' + col
+        df[new_col] = df[col].pct_change() * 100.0
+        feature_set.cols.append(new_col)
+        feature_set.sub_categories['ohlc'].append(new_col)
+
     df.replace([np.inf, -np.inf], 0, inplace=True)          
 
 
-    # Close moving average differences 
+    # % difference price moving averages and close 
 
-    ma_cols = [col for col in df.columns if "ma" in col]
+    
+    ma_cols = price_feature_set.sub_categories['ma']
     percent_diff_cols = []
     for col in ma_cols:
-        df['pctChg+' + col+ "Close"] = (abs(df[col] - df['close']) / ((df[col] + df['close']) / 2)) * 100
-        percent_diff_cols.append('pctChg+' + col+ "Close")
+        new_col_name = 'pctDiff+' + col+ "Close"
+        df[new_col_name] = ((df['close'] - df[col]) / df[col]) * 100
+        percent_diff_cols.append(new_col_name)
     feature_set.sub_categories['ma_diff'] = percent_diff_cols
     feature_set.cols += percent_diff_cols
 
-    
+    vol_ma_cols = volume_feature_set.sub_categories['volMa']
+    percent_diff_vol_cols = []
+    for col in vol_ma_cols:
+        new_col_name = 'pctDiff+' + col+ "Volume"
+        df[new_col_name] = ((df['volume'] - df[col]) / df[col]) * 100
+        percent_diff_vol_cols.append(new_col_name)
+    feature_set.sub_categories['volMa_diff'] = percent_diff_vol_cols
+    feature_set.cols += percent_diff_vol_cols
+
+
     # # % jump from open to high
     intraday_cols = [] 
     df['opHi'] = (df.high - df.open) / df.open * 100.0
@@ -577,7 +610,6 @@ def create_pctChg_vars(
 
     feature_set.sub_categories['intra_day'] = intraday_cols
     feature_set.cols += intraday_cols
-    
     
 
     for col in feature_set.cols:

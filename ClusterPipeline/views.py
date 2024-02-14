@@ -30,7 +30,7 @@ def home(request):
 @csrf_exempt
 @transaction.atomic
 def cluster_run(request):
-    supported_params = CP.SupportedParams.objects.get(pk=20)
+    supported_params = CP.SupportedParams.objects.get(pk=1)
     cluster_features_list = supported_params.features
     context = {"cluster_features_list": cluster_features_list}
 
