@@ -158,6 +158,14 @@ class StockDataSet(DataSet):
             )
         print("Quant Min Max Features Scaled")
 
+        standard_feature_sets = [
+            feature_set
+            for feature_set in self.X_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
+        ]
+        if len(standard_feature_sets) > 0:
+            self.scale_standard(standard_feature_sets, self.training_df, self.test_df)
+
         if to_train:
             # print("Running RandomForest Regressor to find strong predictors")
             # if not hasattr(self.group_params, 'strong_predictors'):
@@ -181,6 +189,14 @@ class StockDataSet(DataSet):
 
         self.group_params.X_feature_sets += self.X_feature_sets
         self.group_params.y_feature_sets += self.y_feature_sets
+
+        if self.training_df.isna().any().any():
+             # Identifying columns with NaN values
+            columns_with_nans = self.training_df.columns[self.training_df.isna().any()].tolist()
+
+            # Printing the names of columns with NaN values
+            print("Columns with NaN values:", columns_with_nans)
+            raise ValueError("Training set has NaN values")
 
         print("Dataset Preprocessing Complete")
 
@@ -221,15 +237,18 @@ class StockDataSet(DataSet):
         for feature_set in feature_sets:
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
-        # todo clean this up
-        if "bb_close" in X_cols:
-            print("bb_close in X_cols")
+
 
         # Create trend features
         self.df, feature_set = create_trend_vars(
             self.df, scaling_method=self.scaling_dict["trend_vars"], ticker=self.ticker
         )
 
+        self.X_feature_sets.append(feature_set)
+        X_cols.update(feature_set.cols)
+
+        # Create momentum features
+        self.df, feature_set = create_momentum_vars(self.df, scaling_method=self.scaling_dict["momentum_vars"])
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
@@ -240,10 +259,15 @@ class StockDataSet(DataSet):
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
-        # Create rolling sum variables
-        pctChg_cols = [col for col in X_cols if "pctChg" in col]
+        pctChgFeatureSet = [feature_set for feature_set in self.X_feature_sets if feature_set.name == 'pctChg_vars'][0]
+        self.df, feature_set = create_lag_vars_features(self.df, pctChgFeatureSet, lags = [3,6], ticker = self.ticker, scaling_method = self.scaling_dict['lag_feature_vars'])
+        self.X_feature_sets.append(feature_set)
+        X_cols.update(feature_set.cols)
 
-        for col in pctChg_cols:
+        # Create rolling sum variables
+        pctChgCols = pctChgFeatureSet.cols
+
+        for col in pctChgCols:
             self.df, feature_set = create_rolling_sum_vars(
                 self.df,
                 col,
@@ -304,6 +328,27 @@ class StockDataSet(DataSet):
             feature_set.scaler = scaler
 
         return training_df, test_df
+    
+    def scale_standard(self, feature_sets, training_df, test_df):
+        """
+        Scales the features in the feature sets in dataframe form using custom MinMaxPercentileScaler
+        """
+        print("Scaling Standard")
+        training_df = training_df.copy()
+        test_df = test_df.copy()
+
+        for feature_set in feature_sets:
+            scaler = StandardScaler()
+            scaler.fit(training_df[feature_set.cols])
+
+            # After fitting the scaler to the combined training dataframe, transform the individual dataframes
+
+            training_df[feature_set.cols] = scaler.transform(
+                training_df[feature_set.cols]
+            )
+            test_df[feature_set.cols] = scaler.transform(test_df[feature_set.cols])
+
+            feature_set.scaler = scaler
 
     def scale_transform(self, df, feature_sets):
         """
@@ -336,11 +381,11 @@ class StockDataSet(DataSet):
 
         # print(self.df.columns.tolist())
 
-        self.df, feature_set = create_lag_vars(self.df, ['pctChgclose'], start_lag = -6, end_lag = -1, ticker = self.ticker)
+        self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -6, end_lag = -1, ticker = self.ticker)
         self.y_feature_sets.append(feature_set)
         self.group_params.y_cols.update(feature_set.cols)
-        self.df, feature_set = create_lag_vars(self.df, ['pctChgclose'], start_lag = 0, end_lag = 15, ticker = self.ticker)
-        print(feature_set.cols)
+        self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 15, ticker = self.ticker)
+
         self.y_feature_sets.append(feature_set)
         self.group_params.y_cols.update(feature_set.cols)
 
@@ -349,7 +394,6 @@ class StockDataSet(DataSet):
         # print("FUCK")
         # print(self.df.columns.tolist())
 
-        print(self.df[sorted(list(self.group_params.y_cols))].tail(20))
 
         self.created_y_targets = True 
 
@@ -446,12 +490,11 @@ def create_price_vars(
     for length in moving_average_vals:
         df["sma" + str(length)] = ta.sma(df.close, length=length)
         df["ema" + str(length)] = ta.ema(df.close, length=length)
-        price_feature_set.cols.append("sma" + str(length))
-        price_feature_set.cols.append("ema" + str(length))
         ma_cols.append("sma" + str(length))
         ma_cols.append("ema" + str(length))
     
     price_feature_set.sub_categories['ma'] = ma_cols
+    price_feature_set.cols += ma_cols
 
 
     # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
@@ -469,6 +512,8 @@ def create_price_vars(
     bb_cols = ['bb_high20', 'bb_low20', 'bb_ma20']
     price_feature_set.cols += bb_cols
     price_feature_set.sub_categories['bb'] = bb_cols
+
+    feature_sets.append(price_feature_set)
     
     # some don chian channels 
     # bb_feauture_set = FeatureSet(scaling_method, 'bb_vars', (0,1))
@@ -491,6 +536,7 @@ def create_price_vars(
         all_cols += feature_set.cols
 
     for col in all_cols:
+        print("filling col", col)   
         df[col] = df[col].fillna(method="bfill")
 
     feature_sets.append(price_feature_set)
@@ -639,6 +685,37 @@ def create_pctChg_vars(
 
     return df, feature_set
 
+def create_momentum_vars(df, scaling_method = ScalingMethod.STANDARD):
+    """
+    Create momentum variables
+    """
+
+    df = df.copy()
+    feature_set = FeatureSet(scaling_method, "momentum_vars")
+
+    series = df.ta.rsi(length=14)
+    series.name = "rsi"
+    df = pd.concat([df, series], axis=1)
+    feature_set.cols.append("rsi")
+    df["rsi"] = df["rsi"].fillna(df["rsi"].mean())
+
+    macd_df = df.ta.macd(fast=12, slow=26, append = False)
+    print(macd_df.columns)  
+    macd_df.columns = ["macd", "macd_signal", "macd_diff"]
+    print(macd_df.columns) 
+    df = pd.concat([df, macd_df], axis=1)
+    feature_set.cols += ["macd", "macd_signal", "macd_diff"]
+    df[macd_df.columns] = df[macd_df.columns].fillna(df[macd_df.columns].mean())
+
+    stoch_df = df.ta.stoch(high = "high", low = "low", close = "close", append = False)
+    stoch_df.columns = ["stoch_k", "stoch_d"]
+    df = pd.concat([df, stoch_df], axis=1)
+    feature_set.cols += ["stoch_k", "stoch_d"]
+    df[stoch_df.columns] = df[stoch_df.columns].fillna(df[stoch_df.columns].mean())
+
+    return df, feature_set
+
+
 
 def create_rolling_sum_vars(
     df: pd.DataFrame,
@@ -657,8 +734,6 @@ def create_rolling_sum_vars(
     :return: The dataframe with the new columns added
     """
 
-    if "pctChg" not in col_name:
-        raise ValueError("Column name must contain pctChg")
     if col_name not in df.columns:
         raise ValueError("Column name not in dataframe")
 
@@ -757,7 +832,7 @@ def add_forward_rolling_sums(
     return df, feature_set
 
 
-def create_lag_vars(
+def create_lag_vars_target(
     df: pd.DataFrame, cols_to_create_lags: list, start_lag, end_lag, ticker = None, scaling_method = ScalingMethod.QUANT_MINMAX
 ) -> list:
     """
@@ -777,12 +852,12 @@ def create_lag_vars(
     for lag in range(start_lag, end_lag + 1):
         for var in cols_to_create_lags:
             if lag >= 0:
-                df_lags[var + "-" + str(lag)] = pd.Series(df[var].shift(lag),
+                df_lags[var + "-" + str(lag) + "_target"] = pd.Series(df[var].shift(lag),
                                                         index=df.index[(lag):])
                 # replace nans with mean in this col
-                df_lags[var + "-" + str(lag)] = df_lags[var + "-" + str(lag)].fillna(df_lags[var + "-" + str(lag)].mean())
+                df_lags[var + "-" + str(lag)+ "_target"] = df_lags[var + "-" + str(lag)+ "_target"].fillna(df_lags[var + "-" + str(lag)+ "_target"].mean())
             elif lag <= -1:
-                df_lags[var + "+" + str(lag * -1)] = pd.Series(df[var].shift(lag),
+                df_lags[var + "+" + str(lag * -1)+ "_target"] = pd.Series(df[var].shift(lag),
                                                             index=df.index[:(lag)])
 
     # Reverse the columns if shifting ahead
@@ -794,16 +869,58 @@ def create_lag_vars(
     # concat the new DataFrame to the original DataFrame
     df = pd.concat([df, df_lags], axis=1)
 
-    print(df_lags.columns.tolist())
-
     feature_set.cols = df_lags.columns.tolist()
 
-    return new_df
+    return df, feature_set
+
+
+def create_lag_vars_features(
+    df: pd.DataFrame, feature_set: list, lags, ticker = None, scaling_method = ScalingMethod.QUANT_MINMAX
+) -> list:
+    """
+    Create a DataFrame of lag variables
+
+    :param df: DataFrame to use
+    :param cols_to_create_lags: a list of column names to create lags for
+    :param start_lag: start lag (default = 1)
+    :param end_lag: end lag (inclusive, default = 1)
+    :return: a list of the new lag variable column names
+    """
+    df = df.copy()
+
+    lag_feature_set = FeatureSet(scaling_method=scaling_method, name = "lag_features_vars", ticker = ticker)
+
+    df_lags = pd.DataFrame(index=df.index)
+
+    for lag in lags:
+
+        for sub_category in feature_set.sub_categories:
+            cols_to_create_lags = feature_set.sub_categories[sub_category]
+            new_lag_cols = {}
+
+            for var in cols_to_create_lags:
+                if lag >= 0:
+                    new_col_name = var + "-" + str(lag)
+                    new_lag_cols[new_col_name] = pd.Series(df[var].shift(lag),
+                                                            index=df.index[(lag):])
+                    # replace nans with mean in this col
+                    new_lag_cols[new_col_name] = new_lag_cols[new_col_name]
+
+            lag_feature_set.sub_categories[sub_category] = list(new_lag_cols.keys())
+            lag_feature_set.cols += list(new_lag_cols.keys())
+
+            df_lags = pd.concat([df_lags, pd.DataFrame(new_lag_cols)], axis=1)
+            df_lags = df_lags.fillna(df_lags.mean())
+
+    # concat the new DataFrame to the original DataFrame
+    df = pd.concat([df, df_lags], axis=1)
+
+    return df, lag_feature_set
 
 def df_train_test_split(dataset, feature_list, train_percentage = 0.8):
     '''
     Split the dataset into train and test sets
-    """
+    '''
     total_rows = len(dataset)
     train_rows = int(total_rows * train_percentage)
 
@@ -811,6 +928,7 @@ def df_train_test_split(dataset, feature_list, train_percentage = 0.8):
     test = dataset.iloc[train_rows:][feature_list]
 
     return train, test
+
 
 
 class MinMaxPercentileScaler(BaseEstimator, TransformerMixin):

@@ -31,7 +31,7 @@ def home(request):
 @transaction.atomic
 def cluster_run(request):
     supported_params = CP.SupportedParams.objects.get(pk=1)
-    cluster_features_list = supported_params.features
+    cluster_features_list = supported_params.price_features + supported_params.trend_features
     context = {"cluster_features_list": cluster_features_list}
 
     if request.method == "POST":
@@ -56,17 +56,39 @@ def cluster_run(request):
         feature_sample_size = dataset_params.get("feature_sample_size")
         feature_sample_num = dataset_params.get("feature_sample_num")
 
-        
-
         # target_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
-        target_features = ['pctChgclose-14','pctChgclose-13','pctChgclose-12','pctChgclose-11','pctChgclose-10','pctChgclose-9','pctChgclose-8','pctChgclose-7','pctChgclose-6','pctChgclose-5','pctChgclose-4','pctChgclose-3','pctChgclose-2','pctChgclose-1','pctChgclose-0','pctChgclose+1','pctChgclose+2','pctChgclose+3','pctChgclose+4','pctChgclose+5','pctChgclose+6']
+        target_features = [
+            "pctChgclose-14_target",
+            "pctChgclose-13_target",
+            "pctChgclose-12_target",
+            "pctChgclose-11_target",
+            "pctChgclose-10_target",
+            "pctChgclose-9_target",
+            "pctChgclose-8_target",
+            "pctChgclose-7_target",
+            "pctChgclose-6_target",
+            "pctChgclose-5_target",
+            "pctChgclose-4_target",
+            "pctChgclose-3_target",
+            "pctChgclose-2_target",
+            "pctChgclose-1_target",
+            "pctChgclose-0_target",
+            "pctChgclose+1_target",
+            "pctChgclose+2_target",
+            "pctChgclose+3_target",
+            "pctChgclose+4_target",
+            "pctChgclose+5_target",
+            "pctChgclose+6_target",
+        ]
 
         scaling_dict = {
             "price_vars": SP.ScalingMethod.UNSCALED,
             "trend_vars": SP.ScalingMethod.UNSCALED,
-            "pctChg_vars": SP.ScalingMethod.QUANT_MINMAX,
-            "rolling_vars": SP.ScalingMethod.QUANT_MINMAX,
+            "pctChg_vars": SP.ScalingMethod.STANDARD,
+            "rolling_vars": SP.ScalingMethod.STANDARD,
             "target_vars": SP.ScalingMethod.QUANT_MINMAX,
+            "lag_feature_vars": SP.ScalingMethod.STANDARD,
+            "momentum_vars": SP.ScalingMethod.STANDARD,
         }
 
         col_dict = {
@@ -75,6 +97,8 @@ def cluster_run(request):
             "RollingVars": supported_params.rolling_features,
             "PriceVars": supported_params.price_features,
             "TrendVars": supported_params.trend_features,
+            "LagVars": supported_params.lag_features,
+            "MomentumVars": supported_params.momentum_features,
         }
 
         training_features = []

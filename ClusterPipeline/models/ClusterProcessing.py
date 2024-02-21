@@ -53,6 +53,8 @@ class SupportedParams(models.Model):
     trend_features = models.JSONField(default=list)
     price_features = models.JSONField(default=list)
     cuma_features = models.JSONField(default=list)
+    lag_features = models.JSONField(default=list)
+    momentum_features = models.JSONField(default=list)
 
     def generate_features(self):
         """
@@ -81,11 +83,13 @@ class SupportedParams(models.Model):
         )
         group_params.initialize()
         group_params.scaling_dict = {
-            "price_vars": ScalingMethod.SBSG,
-            "trend_vars": ScalingMethod.SBS,
-            "pctChg_vars": ScalingMethod.QUANT_MINMAX,
-            "rolling_vars": ScalingMethod.QUANT_MINMAX_G,
-            "target_vars": ScalingMethod.UNSCALED,
+            "price_vars": ScalingMethod.UNSCALED,
+            "trend_vars": ScalingMethod.UNSCALED,
+            "pctChg_vars": ScalingMethod.STANDARD,
+            "rolling_vars": ScalingMethod.STANDARD,
+            "target_vars": ScalingMethod.QUANT_MINMAX,
+            "lag_feature_vars": ScalingMethod.STANDARD,
+            "momentum_vars": ScalingMethod.STANDARD,
         }
         cluster_group = StockClusterGroup()
         cluster_group.set_group_params(group_params)
@@ -121,11 +125,13 @@ class SupportedParams(models.Model):
         )
         group_params.initialize()
         group_params.scaling_dict = {
-            "price_vars": ScalingMethod.SBSG,
-            "trend_vars": ScalingMethod.SBS,
-            "pctChg_vars": ScalingMethod.QUANT_MINMAX,
-            "rolling_vars": ScalingMethod.QUANT_MINMAX_G,
-            "target_vars": ScalingMethod.UNSCALED,
+            "price_vars": ScalingMethod.UNSCALED,
+            "trend_vars": ScalingMethod.UNSCALED,
+            "pctChg_vars": ScalingMethod.STANDARD,
+            "rolling_vars": ScalingMethod.STANDARD,
+            "target_vars": ScalingMethod.QUANT_MINMAX,
+            "lag_feature_vars": ScalingMethod.STANDARD,
+            "momentum_vars": ScalingMethod.STANDARD,
         }
         cluster_group = StockClusterGroup()
         cluster_group.set_group_params(group_params)
@@ -138,6 +144,21 @@ class SupportedParams(models.Model):
                 cluster_group.group_params.X_feature_sets,
             )
         ).cols
+
+        self.lag_features = next(
+            filter(
+                lambda feature_set: "lag_features_vars" in feature_set.name,
+                cluster_group.group_params.X_feature_sets,
+            )
+        ).cols
+
+        self.momentum_features = next(
+            filter(
+                lambda feature_set: "momentum_vars" in feature_set.name,
+                cluster_group.group_params.X_feature_sets,
+            )
+        ).cols
+
         self.cuma_features = next(
             (
                 filter(
@@ -271,8 +292,6 @@ class StockClusterGroupParams(ClusterGroupParams):
             + "steps"
             + "-"
             + str(self.interval)
-            + "-"
-            + str(self.target_cols)
             + "-"
             + str(self.cluster_features)
         )
@@ -414,8 +433,8 @@ class StockClusterGroup(ClusterGroup):
 
         if alg == "TSKM":
             # n_clusters = self.determine_n_clusters(X_train_cluster,metric)
-            # n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
-            n_clusters = 1
+            n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
+            # n_clusters = 1
             self.cluster_alg = TimeSeriesKMeans(
                 n_clusters=n_clusters, metric=metric, random_state=3
             )
@@ -524,7 +543,27 @@ class StockClusterGroup(ClusterGroup):
             )
             self.clusters.append(cluster)
 
-    def train_all_rnns(self, model_features, fine_tune=False):
+    def manually_create_cluster(self, train_seq_elements, test_seq_elements):
+        """
+        Method to manually create a cluster. This method is used when the user wants to create a cluster manually
+        """
+        cluster = StockCluster.objects.create(
+            label = 1,
+            cluster_group = self,
+            cluster_metrics = {},
+            centroid = [],
+        )
+        cluster.initialize(
+            train_seq_elements,
+            test_seq_elements,
+            self.group_params.X_feature_dict,
+            self.group_params.y_feature_dict,
+        )
+
+        self.clusters.append(cluster)
+
+
+    def train_all_rnns(self, model_features, fine_tune=False, model = None):
         """
         Method to train an RNN for each cluster. The functionality for training an RNN is encapsulated in the train_rnn method of the StockCluster class.
         This method iterates over the clusters and trains the model.
@@ -533,11 +572,6 @@ class StockClusterGroup(ClusterGroup):
         model_features: The features to use for training the RNN.
         fine_tune: Boolean to indicate whether we are training a base model and fine tunining it on the individual clusters.
         """
-
-        model = None
-        if fine_tune:
-            self.train_general_model(model_features)
-            model = self.general_model
 
         self.filtered_clusters = []
 
@@ -597,6 +631,15 @@ class StockClusterGroup(ClusterGroup):
         indices = [X_feature_dict[x] for x in feature_list]
         # Using numpy's advanced indexing to select the required features
         return seq[:, :, indices]
+    
+    def filter_y_by_features(self,seq, feature_list, y_feature_dict):
+        '''
+        Method to filter a 3d array of sequences by a list of features.
+        '''
+        seq = seq.copy()
+        indices = [y_feature_dict[x] for x in feature_list]
+        # Using numpy's advanced indexing to select the required features
+        return seq[:, indices]
 
     def get_3d_array(self):
         """
@@ -922,7 +965,12 @@ class StockCluster(Cluster):
 
                 num_encoder_layers = model_param["num_encoder_layers"]
 
-                model = RNNModel.objects.create(cluster=self)
+                if 'sum' in target_features[0]:
+                    target_feature_type = 'cumulative'
+                else:
+                    target_feature_type = 'lag'
+
+                model = RNNModel.objects.create(cluster = self, target_feature_type = target_feature_type)
                 print(
                     "Creating Model "
                     + str(num_models)
@@ -936,9 +984,9 @@ class StockCluster(Cluster):
                 model.initialize(
                     model_type=model_type,
                     X_train=X_train_filtered,
-                    y_train=self.y_train,
+                    y_train=y_train_filtered,
                     X_test=X_test_filtered,
-                    y_test=self.y_test,
+                    y_test=y_test_filtered,
                     model_features=features,
                     model_dir=self.cluster_dir + "model" + str(num_models) + "/",
                     num_autoencoder_layers=num_encoder_layers,
@@ -1061,26 +1109,36 @@ class StockCluster(Cluster):
         """
 
         num_strong_predictors = math.ceil(num_features * strong_ratio)
-        other_predictors = num_features - num_strong_predictors
+        num_other_predictors = num_features - num_strong_predictors
+        training_features = []
 
         if num_strong_predictors > len(strong_predictors):
             num_strong_predictors = len(strong_predictors)
-            other_predictors = num_features - num_strong_predictors
+
+            
+
 
         if num_strong_predictors > 0:
             strong_predictors = np.random.choice(
                 strong_predictors, num_strong_predictors, replace=False
             )
+            training_features += list(strong_predictors)
         else:
             strong_predictors = []
 
+        if 'rsi' in features:
+            training_features += ["rsi", "macd", "macd_signal", "macd_diff", "stoch_k", "stoch_d"]
+            num_other_predictors = num_features - len(training_features)
+
         other_predictors = np.random.choice(
-            [x for x in features if x not in strong_predictors],
-            other_predictors,
+            [x for x in features if x not in training_features],
+            num_other_predictors,
             replace=False,
         )
 
-        return list(strong_predictors) + list(other_predictors)
+        training_features += list(other_predictors)
+
+        return training_features    
 
 
 @receiver(models.signals.post_delete, sender=StockClusterGroupParams)

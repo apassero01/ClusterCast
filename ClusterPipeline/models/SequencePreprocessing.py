@@ -100,6 +100,7 @@ class ScalingMethod(Enum):
     SBSG = 3
     QUANT_MINMAX_G = 4
     UNSCALED = 5
+    STANDARD = 6
 
 
 class SequenceSet:
@@ -213,6 +214,30 @@ class StockSequenceSet(SequenceSet):
             ]
             [
                 seq_element.y_feature_sets.extend(y_quant_min_max_feature_sets)
+                for seq_element in test_seq_elements
+                if seq_element.ticker == curTicker
+            ]
+
+            x_standard_feature_sets = [
+                feature_set
+                for feature_set in data_set.X_feature_sets
+                if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
+            ]
+
+            y_standard_feature_sets = [
+                feature_set
+                for feature_set in data_set.y_feature_sets
+                if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
+            ]
+
+            [
+                seq_element.X_feature_sets.extend(x_standard_feature_sets)
+                for seq_element in train_seq_elements
+                if seq_element.ticker == curTicker
+            ]
+
+            [
+                seq_element.y_feature_sets.extend(y_standard_feature_sets)
                 for seq_element in test_seq_elements
                 if seq_element.ticker == curTicker
             ]

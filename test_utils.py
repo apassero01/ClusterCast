@@ -1,10 +1,12 @@
 import os
+from copy import deepcopy
 
 os.environ["DJANGO_SETTINGS_MODULE"] = "ClusterCast.settings"
 import django
 
 django.setup()
 import ClusterPipeline.models.ClusterProcessing as cp
+import ClusterPipeline.models.SequencePreprocessing as sp
 from asgiref.sync import sync_to_async
 import matplotlib.pyplot as plt
 from tslearn.clustering import TimeSeriesKMeans
@@ -52,6 +54,13 @@ def get_all_clusters(groups):
 
     return clusters
 
+@sync_to_async
+def recreate_group(group):
+    group_params = group.group_params
+    group_params.pk = None
+    
+    group = cp.StockClusterGroup.objects.create(group_params=deepcopy(group.group_params))
+    group.generate_new_group()
 
 def visualize_cluster_centroid(centroid, cluster_features):
     # Extract the number of features
@@ -170,6 +179,34 @@ def create_regular_model(input_shape, latent_dim=6):
     return model_lstm
 
 
+def custom_profit_loss_percent_change(y_true, y_pred):
+    """
+    Custom loss function to maximize profit based on predicted percent changes.
+    
+    Parameters:
+    - y_true: Actual percent changes. Expected shape (batch_size, sequence_length).
+    - y_pred: Predicted percent changes. Expected shape (batch_size, sequence_length).
+    
+    Returns:
+    - A scalar loss value to be minimized.
+    """
+    # Determine the positions: 1 for buy (positive prediction), -1 for sell (negative prediction)
+    positions = tf.where(y_pred > 0, 1.0, -1.0)
+    
+    # Calculate profits: product of actual percent changes and positions
+    profits = positions * y_true
+
+    loss = -tf.reduce_sum(profits)
+    
+    # To maximize profit, we minimize the negative sum of profits
+    penalty = tf.reduce_mean(tf.square(y_pred - y_true) * tf.abs(y_true))
+    
+    # Combine the loss and the penalty
+    total_loss = loss + penalty/2
+    
+    return total_loss
+
+
 def attention_mechanism(encoder_outputs, decoder_state):
     # Assuming encoder_outputs is [batch_size, input_steps, features]
     # and decoder_state is [batch_size, features]
@@ -189,8 +226,8 @@ def create_attention_model(input_steps, output_steps, features):
     encoder_lstm1 = LSTM(
         200,
         return_sequences=True,
-        kernel_regularizer=L2(0.001),
-        recurrent_regularizer=L2(0.001),
+        kernel_regularizer=L2(0.01),
+        recurrent_regularizer=L2(0.01),
     )
     encoder_output1 = encoder_lstm1(encoder_inputs)
 
@@ -330,7 +367,7 @@ def train_model(
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + f"_lr{lr}_batch{batch_size}_first"
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
     early_stopping = EarlyStopping(
-        monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True
+        monitor="val_loss", patience=early_stopping_patience, restore_best_weights=False
     )
 
     model.fit(
@@ -394,7 +431,7 @@ def visualize_future_distribution(results):
     fig = go.Figure()
     print(results.shape)
 
-    for i in range(2):
+    for i in range(6):
 
         fig.add_trace(go.Box(y=results[f'predicted_{i+1}'], name=f'Predicted {i}')) 
         fig.add_trace(go.Box(y=results[f'real_{i+1}'], name=f'Real {i}'))
@@ -406,3 +443,68 @@ def visualize_future_distribution(results):
     ) 
 
     return fig
+
+
+def find_closest_centroid(new_centroid, centroids_list):
+    '''
+    Find the closest centroid to a new centroid among a list of 2D centroids.
+    
+    Parameters:
+    - new_centroid: NumPy array of shape (m, n) representing the new 2D centroid.
+    - centroids_list: List of NumPy arrays, each of shape (m, n) representing existing 2D centroids.
+    
+    Returns:
+    - Index of the closest centroid in the `centroids_list`.
+    '''
+    # Initialize a list to store distances
+    distances = []
+    
+    # Calculate the distance from the new centroid to each centroid in the list
+    for centroid in centroids_list:
+        # Calculate Frobenius norm as the distance
+        distance = np.linalg.norm(centroid - new_centroid, ord='fro')
+        distances.append(distance)
+    
+    # Convert distances to a NumPy array for efficient operations
+    distances = np.array(distances)
+    
+    # Return the index of the closest centroid
+    return np.argmin(distances)
+
+
+def reconstruct_sequence_elements(X_train, y_train, X_test, y_test, X_feature_dict, y_feature_dict):
+    '''
+    For experimental purposes we need to recreate the original sequence element objects 
+    However, when doing this we lose information such as ticker, start and end dates, etc.
+    '''
+
+    training_seq_elements = [] 
+    test_seq_elements = []
+
+    for i in range(len(X_train)):
+        seq_element = sp.SequenceElement(
+            X_train[i],
+            y_train[i],
+            X_feature_dict,
+            y_feature_dict,
+            True,
+            None,
+            None,
+            None,
+        )
+        training_seq_elements.append(seq_element)
+    
+    for i in range(len(X_test)):
+        seq_element = sp.SequenceElement(
+            X_test[i],
+            y_test[i],
+            X_feature_dict,
+            y_feature_dict,
+            False,
+            None,
+            None,
+            None,
+        )
+        test_seq_elements.append(seq_element)
+
+    return training_seq_elements, test_seq_elements
