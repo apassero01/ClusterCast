@@ -366,9 +366,9 @@ def forcast(request):
                 forcast_timeline.add_prediction_range(
                     start_date=prediction_start_date,
                     end_date=prediction_end_date,
-                    total_model_accuracy_thresh=60,
-                    individual_model_accuracy_thresh=65,
-                    epochs_threshold=20,
+                    total_model_accuracy_thresh=50,
+                    individual_model_accuracy_thresh=50,
+                    epochs_threshold=10,
                 )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk
@@ -395,9 +395,9 @@ def forcast(request):
             forcast_timeline.add_prediction_range(
                 start_date=prediction_start_date,
                 end_date=prediction_end_date,
-                total_model_accuracy_thresh=60,
-                individual_model_accuracy_thresh=65,
-                epochs_threshold=20,
+                total_model_accuracy_thresh=50,
+                individual_model_accuracy_thresh=50,
+                epochs_threshold=10,
             )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk
@@ -405,8 +405,8 @@ def forcast(request):
         return redirect(
             "forcast_detail",
             forcast_id=forcast_id,
-            prediction_start_date=datetime.strftime(prediction_start_date, "%Y-%m-%d"),
-            prediction_end_date=datetime.strftime(prediction_end_date, "%Y-%m-%d"),
+            prediction_start_date=prediction_start_date,
+            prediction_end_date=prediction_end_date,
         )
 
     return render(request, "ClusterPipeline/predictions.html", {"tickers": tickers})
@@ -454,7 +454,7 @@ def forcast_detail(request, forcast_id, prediction_start_date, prediction_end_da
 
     close_df = yf.download(
         prediction.ticker,
-        start=prediction_start_date.strftime("%Y-%m-%d"),
+        start=(prediction_start_date + timedelta(days=-20)).strftime("%Y-%m-%d"),
         end=(date.today() + timedelta(days=1)).strftime("%Y-%m-%d"),
         interval=prediction.interval,
     )

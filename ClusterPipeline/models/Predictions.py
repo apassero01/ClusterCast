@@ -22,6 +22,7 @@ import numpy as np
 from tslearn.metrics import dtw
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
+from itertools import accumulate
 
 
 def prediction_directory_path(instance, filename):
@@ -155,7 +156,6 @@ class StockPrediction(Prediction):
         sequence_set = self.mirror_group(self.generic_dataset, cluster_group)
         future_sequence_elements = sequence_set.group_params.future_seq_elements
 
-        target_scaler = sequence_set.group_params.y_feature_sets[0].scaler
 
         rnn_predictions = []
 
@@ -233,8 +233,22 @@ class StockPrediction(Prediction):
                     end_date, periods=len(cur_prediction) + 1, freq=self.market_calendar
                 )[1:].tolist()
 
+                if model.target_feature_type == "lag": 
+                    target_feature_set = [feature_set for feature_set in sequence_set.group_params.y_feature_sets if feature_set.name == "lag_target_vars"][0]
+                else:
+                    target_feature_set = [feature_set for feature_set in sequence_set.group_params.y_feature_sets if feature_set.name == "target_vars_cumulative"][0]
+
+                target_scaler = target_feature_set.scaler
+
                 end_day_close = self.generic_dataset.test_df.loc[end_date]["close"]
+                print("PRESCALED PREDICTION")
+                print(cur_prediction)
                 cur_prediction = target_scaler.inverse_transform(cur_prediction)
+                print("AFter transform")
+                print(cur_prediction)
+
+                if model.target_feature_type == "lag":
+                    cur_prediction = list(accumulate(cur_prediction[-6:]))
 
                 price_predictions = []
                 daily_accuracy = []
@@ -377,6 +391,8 @@ class StockPrediction(Prediction):
             "pctChg_vars": ScalingMethod.QUANT_MINMAX,
             "rolling_vars": ScalingMethod.QUANT_MINMAX,
             "target_vars": ScalingMethod.QUANT_MINMAX,
+            "lag_feature_vars": ScalingMethod.STANDARD,
+            "momentum_vars": ScalingMethod.STANDARD,
         }
         group_params = StockClusterGroupParams(
             tickers=[self.ticker],
@@ -664,18 +680,19 @@ class StockForcastTimeline(ForcastTimeline):
             current_predictions.append(stock_prediction)
 
         # sort date list and prediction list
-        self.prediction_dates, self.stock_predictions = zip(
-            *sorted(zip(self.prediction_dates, self.stock_predictions))
-        )
-        self.prediction_start_date = self.prediction_dates[0]
-        self.prediction_end_date = self.prediction_dates[-1]
+        if len(self.stock_predictions) > 0:
+            self.prediction_dates, self.stock_predictions = zip(
+                *sorted(zip(self.prediction_dates, self.stock_predictions))
+            )
+            self.prediction_start_date = self.prediction_dates[0]
+            self.prediction_end_date = self.prediction_dates[-1]
 
-        for i in range(len(self.stock_predictions) - 1, 0, -1):
-            if self.stock_predictions[i].final_prediction_date is not None:
-                self.final_prediction_date = self.stock_predictions[
-                    i
-                ].final_prediction_date
-                break
+            for i in range(len(self.stock_predictions) - 1, 0, -1):
+                if self.stock_predictions[i].final_prediction_date is not None:
+                    self.final_prediction_date = self.stock_predictions[
+                        i
+                    ].final_prediction_date
+                    break
 
     def create_prediction_output(self, prediction_start_date, prediction_end_date):
         """

@@ -159,14 +159,14 @@ class SupportedParams(models.Model):
             )
         ).cols
 
-        self.cuma_features = next(
-            (
-                filter(
-                    lambda feature_set: "cum" in feature_set.name,
-                    cluster_group.group_params.X_feature_sets,
-                )
-            )
-        ).cols
+        # self.cuma_features = next(
+        #     (
+        #         filter(
+        #             lambda feature_set: "cum" in feature_set.name,
+        #             cluster_group.group_params.X_feature_sets,
+        #         )
+        #     )
+        # ).cols
         self.price_features = next(
             (
                 filter(
@@ -410,7 +410,7 @@ class StockClusterGroup(ClusterGroup):
         """
 
         self.sequence_set = StockSequenceSet(self.group_params)
-        self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=True)
+        self.sequence_set.preprocess_pipeline(add_cuma_pctChg_features=False)
         self.group_params = self.sequence_set.group_params
         self.X_feature_dict = self.group_params.X_feature_dict
         self.y_feature_dict = self.group_params.y_feature_dict
@@ -592,7 +592,7 @@ class StockClusterGroup(ClusterGroup):
         """
         model_features = self.group_params.training_features
         cluster.group_params = self.group_params
-        cluster.train_rnn(model_features, None, 5)
+        cluster.train_rnn(model_features, None, 5, sample_size=20)
         cluster.save()
         cluster.hard_filter_models(accuracy_threshold=30, epoch_threshold=1)
 
@@ -939,6 +939,9 @@ class StockCluster(Cluster):
         num_models = 0
         self.models = []
 
+        if not hasattr(self.cluster_group.group_params, 'strong_predictors'):
+            self.cluster_group.group_params.strong_predictors = []
+
         for i in range(num_feauture_iterations):
             features = self.random_sample_features(
                 sample_size, model_features, self.cluster_group.group_params.strong_predictors
@@ -1107,16 +1110,15 @@ class StockCluster(Cluster):
         """
         Method to randomly sample features from a list of features
         """
-
+        print(num_features)
         num_strong_predictors = math.ceil(num_features * strong_ratio)
-        num_other_predictors = num_features - num_strong_predictors
+        
         training_features = []
 
         if num_strong_predictors > len(strong_predictors):
             num_strong_predictors = len(strong_predictors)
 
-            
-
+        
 
         if num_strong_predictors > 0:
             strong_predictors = np.random.choice(
@@ -1126,15 +1128,22 @@ class StockCluster(Cluster):
         else:
             strong_predictors = []
 
+        num_other_predictors = num_features - len(training_features)
+            
+
         if 'rsi' in features:
             training_features += ["rsi", "macd", "macd_signal", "macd_diff", "stoch_k", "stoch_d"]
             num_other_predictors = num_features - len(training_features)
+
+        print((num_other_predictors))
 
         other_predictors = np.random.choice(
             [x for x in features if x not in training_features],
             num_other_predictors,
             replace=False,
         )
+
+        print(len(other_predictors))
 
         training_features += list(other_predictors)
 

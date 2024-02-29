@@ -6,6 +6,7 @@ import ta as technical_analysis
 from datetime import datetime, timedelta
 import yfinance as yf
 from .SequencePreprocessing import StockSequenceSet, ScalingMethod
+from .StockPatterns import OHLCVFactory, MovingAverageFactory, BandFactory, MomentumFactory
 
 # from ClusterProcessing import ClusterGroupParams, StockClusterGroupParams
 from sklearn.preprocessing import (
@@ -224,12 +225,20 @@ class StockDataSet(DataSet):
         """
         if self.created_features:
             return
+        
+        self.factories = {
+            'ohlcv_factory' : OHLCVFactory(self.df),
+            'moving_average_factory' : MovingAverageFactory(self.df),
+            'band_factory' : BandFactory(self.df),
+            'momentum_factory' : MomentumFactory(self.df)
+        }
 
         X_cols = set()
 
         # Create price features
         self.df, feature_sets = create_price_vars(
             self.df,
+            self.factories,
             scaling_method=self.scaling_dict["price_vars"],
             cluster_features=self.group_params.cluster_features,
             ticker=self.ticker,
@@ -241,20 +250,20 @@ class StockDataSet(DataSet):
 
         # Create trend features
         self.df, feature_set = create_trend_vars(
-            self.df, scaling_method=self.scaling_dict["trend_vars"], ticker=self.ticker
+            self.df, self.factories, scaling_method=self.scaling_dict["trend_vars"], ticker=self.ticker
         )
 
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create momentum features
-        self.df, feature_set = create_momentum_vars(self.df, scaling_method=self.scaling_dict["momentum_vars"])
+        self.df, feature_set = create_momentum_vars(self.df, self.factories, scaling_method=self.scaling_dict["momentum_vars"])
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
         # Create percent change variables
         self.df, feature_set = create_pctChg_vars(
-            self.df, self.X_feature_sets, scaling_method=self.scaling_dict["pctChg_vars"], ticker=self.ticker
+            self.df, self.X_feature_sets, self.factories, scaling_method=self.scaling_dict["pctChg_vars"], ticker=self.ticker
         )
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
@@ -271,13 +280,14 @@ class StockDataSet(DataSet):
             self.df, feature_set = create_rolling_sum_vars(
                 self.df,
                 col,
+                rolling_sum_windows=[50],
                 scaling_method=self.scaling_dict["rolling_vars"],
                 ticker=self.ticker,
             )
             self.X_feature_sets.append(feature_set)
             X_cols.update(feature_set.cols)
         
-        self.df, feature_set = create_rolling_sum_vars(self.df, 'pctChgclose', scaling_method=self.scaling_dict['rolling_vars'],ticker = self.ticker,rolling_sum_windows=[7,8,9,10,11,12,13,14,15])
+        self.df, feature_set = create_rolling_sum_vars(self.df, 'pctChgclose', scaling_method=self.scaling_dict['rolling_vars'],ticker = self.ticker,rolling_sum_windows=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15])
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
         
@@ -286,6 +296,8 @@ class StockDataSet(DataSet):
         self.group_params.X_cols.update(X_cols)
 
         self.created_features = True
+
+        print(self.df.columns.tolist())
 
     def train_test_split(self, feature_list=None, training_percentage=0.8):
 
@@ -338,6 +350,7 @@ class StockDataSet(DataSet):
         test_df = test_df.copy()
 
         for feature_set in feature_sets:
+            print(f"Name: {feature_set.name} len {len(feature_set.cols)}")
             scaler = StandardScaler()
             scaler.fit(training_df[feature_set.cols])
 
@@ -381,18 +394,18 @@ class StockDataSet(DataSet):
 
         # print(self.df.columns.tolist())
 
+        pctChg_target_f_set = FeatureSet(scaling_method = self.scaling_dict['target_vars'], name = "lag_target_vars", ticker = self.ticker, percentiles = [10,90])
+
         self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -6, end_lag = -1, ticker = self.ticker)
-        self.y_feature_sets.append(feature_set)
-        self.group_params.y_cols.update(feature_set.cols)
-        self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 15, ticker = self.ticker)
+        pctChg_target_f_set.cols += feature_set.cols
 
-        self.y_feature_sets.append(feature_set)
-        self.group_params.y_cols.update(feature_set.cols)
+        self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 14, ticker = self.ticker)
+        pctChg_target_f_set.cols += feature_set.cols
 
-        
-
-        # print("FUCK")
-        # print(self.df.columns.tolist())
+        self.y_feature_sets.append(pctChg_target_f_set)
+        self.group_params.y_cols.update(pctChg_target_f_set.cols)
+        print("TARGETS IN THE FEATURE SETS \n")
+        print(pctChg_target_f_set.cols)
 
 
         self.created_y_targets = True 
@@ -469,7 +482,7 @@ def get_stock_data(
 
 def create_price_vars(
     df: pd.DataFrame,
-    moving_average_vals=[5, 10, 20, 30, 50, 100],
+    factories: dict,
     scaling_method=ScalingMethod.SBSG,
     cluster_features=None,
     ticker=None,
@@ -484,40 +497,33 @@ def create_price_vars(
     price_feature_set.cols += ohlc_cols
     price_feature_set.sub_categories['ohlc'] = ohlc_cols
 
-
-    # Create price features
+    ma_factory = factories['moving_average_factory']
     ma_cols = []
-    for length in moving_average_vals:
-        df["sma" + str(length)] = ta.sma(df.close, length=length)
-        df["ema" + str(length)] = ta.ema(df.close, length=length)
-        ma_cols.append("sma" + str(length))
-        ma_cols.append("ema" + str(length))
-    
+
+    sma_df = ma_factory.createSMA()   
+    df = pd.concat([df, sma_df], axis=1)
+    ma_cols += sma_df.columns.tolist()
+
+    ema_df = ma_factory.createEMA()
+    df = pd.concat([df, ema_df], axis=1)
+    ma_cols += ema_df.columns.tolist()
+
+
     price_feature_set.sub_categories['ma'] = ma_cols
     price_feature_set.cols += ma_cols
 
+    bb_factory = factories['band_factory'] 
+    bb_cols = []
 
-    # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
-    # df = pd.concat([df, lag_df], axis=1)
-    # feature_set.cols += lag_df.columns.tolist()
+    bb_df = bb_factory.createBB()
+    df = pd.concat([df, bb_df], axis=1)
+    bb_cols += bb_df.columns.tolist()
 
-    bollinger_obj = technical_analysis.volatility.BollingerBands(
-        df.close, window=20, window_dev=2
-    )
-
-    df['bb_high20'] = bollinger_obj.bollinger_hband()
-    df['bb_low20'] = bollinger_obj.bollinger_lband()
-    df['bb_ma20'] = bollinger_obj.bollinger_mavg()
-
-    bb_cols = ['bb_high20', 'bb_low20', 'bb_ma20']
     price_feature_set.cols += bb_cols
     price_feature_set.sub_categories['bb'] = bb_cols
 
     feature_sets.append(price_feature_set)
     
-    # some don chian channels 
-    # bb_feauture_set = FeatureSet(scaling_method, 'bb_vars', (0,1))
-
     if cluster_features:
         # We want to scale all of the price cluster features on the same scale.
         # If cluster_feaure[0] is a price_var, the rest will also be
@@ -535,17 +541,13 @@ def create_price_vars(
     for feature_set in feature_sets:
         all_cols += feature_set.cols
 
-    for col in all_cols:
-        print("filling col", col)   
-        df[col] = df[col].fillna(method="bfill")
-
     feature_sets.append(price_feature_set)
 
     return df, feature_sets
 
 
 def create_trend_vars(
-    df: pd.DataFrame, scaling_method=ScalingMethod.SBS, ticker=None
+    df: pd.DataFrame, factories: dict, scaling_method=ScalingMethod.SBS, ticker=None
 ) -> (pd.DataFrame, FeatureSet):
     """
     Create trend features which are made up of features that are not price features but are not percent change features.
@@ -554,32 +556,27 @@ def create_trend_vars(
 
     feature_set.cols += ["volume"]
 
-    # lag_df = create_lag_vars(df, feature_set.cols, start_lag, end_lag)
-    # df =  pd.concat([df, lag_df], axis=1)
-    # feature_set.cols += lag_df.columns.tolist()
 
     for col in feature_set.cols:
-        df[col] = df[col].fillna(df[col].mean())
+        df[col] = df[col].fillna(method = "bfill")
 
+    ma_factory = factories['moving_average_factory']
     ma_cols = []
-    for length in [5, 10, 20, 50]:
-        df["volSma" + str(length)] = ta.sma(df.volume, length=length)
-        df["volEma" + str(length)] = ta.ema(df.volume, length=length)
-        ma_cols.append("volSma" + str(length))
-        ma_cols.append("volEma" + str(length))
+
+    vol_sma_df = ma_factory.createSMAVolume() 
+    df = pd.concat([df, vol_sma_df], axis=1)
+    ma_cols += vol_sma_df.columns.tolist()
+
     feature_set.cols += ma_cols
     feature_set.sub_categories['volMa'] = ma_cols
 
     all_cols = feature_set.cols
 
-    for col in all_cols:
-        df[col] = df[col].fillna(method="bfill")
-
     return df, feature_set
 
 
 def create_pctChg_vars(
-    df: pd.DataFrame, X_feature_sets, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1, ticker = None
+    df: pd.DataFrame, X_feature_sets, factories, scaling_method = ScalingMethod.QUANT_MINMAX, start_lag = 1, end_lag = 1, ticker = None
 ) -> (pd.DataFrame, FeatureSet):
     """
     Create key target variables from the OHLC processed data.
@@ -605,87 +602,68 @@ def create_pctChg_vars(
 
     feature_set = FeatureSet(scaling_method, "pctChg_vars", ticker=ticker)
 
-    price_feature_set = [feature_set for feature_set in X_feature_sets if feature_set.name == 'price_vars'][0]
-    volume_feature_set = [feature_set for feature_set in X_feature_sets if feature_set.name == 'trend_vars'][0]
+    ohlcv_factory = factories['ohlcv_factory']
+    ohlcv_pct_chg = ohlcv_factory.createPctChg()
+    df = pd.concat([df, ohlcv_pct_chg], axis=1)
 
-    feature_set.sub_categories['ohlc'] = []
-    for col in price_feature_set.sub_categories['ohlc']:
-        new_col = 'pctChg' + col
-        df[new_col] = df[col].pct_change() * 100.0
-        feature_set.cols.append(new_col)
-        feature_set.sub_categories['ohlc'].append(new_col)
-
-    df.replace([np.inf, -np.inf], 0, inplace=True)          
-
+    feature_set.cols += ohlcv_pct_chg.columns.tolist()
+    feature_set.sub_categories['ohlcv'] = ohlcv_pct_chg.columns.tolist()
 
     # % difference price moving averages and close 
 
-    
-    ma_cols = price_feature_set.sub_categories['ma']
-    percent_diff_cols = []
-    for col in ma_cols:
-        new_col_name = 'pctDiff+' + col+ "Close"
-        df[new_col_name] = ((df['close'] - df[col]) / df[col]) * 100
-        percent_diff_cols.append(new_col_name)
-    feature_set.sub_categories['ma_diff'] = percent_diff_cols
-    feature_set.cols += percent_diff_cols
+    ma_diff_cols = [] 
+    ma_factory = factories['moving_average_factory']
+    smaPctDiff_df = ma_factory.createSMAPctDiff()
+    df = pd.concat([df, smaPctDiff_df], axis=1)
+    ma_diff_cols += smaPctDiff_df.columns.tolist()
 
-    vol_ma_cols = volume_feature_set.sub_categories['volMa']
+    emaPctDiff_df = ma_factory.createEMAPctDiff()
+    df = pd.concat([df, emaPctDiff_df], axis=1)
+    ma_diff_cols += emaPctDiff_df.columns.tolist()
+
+    smaDeriv_df = ma_factory.createSMADerivative()
+    df = pd.concat([df, smaDeriv_df], axis=1)
+    ma_diff_cols += smaDeriv_df.columns.tolist()
+
+    emaDeriv_df = ma_factory.createEMADerivative()
+    df = pd.concat([df, emaDeriv_df], axis=1)
+    ma_diff_cols += emaDeriv_df.columns.tolist()
+
+
+    feature_set.sub_categories['ma_diff'] = ma_diff_cols
+    feature_set.cols += ma_diff_cols
+
     percent_diff_vol_cols = []
-    for col in vol_ma_cols:
-        new_col_name = 'pctDiff+' + col+ "Volume"
-        df[new_col_name] = ((df['volume'] - df[col]) / df[col]) * 100
-        percent_diff_vol_cols.append(new_col_name)
+
+    pct_diff_vol_df = ma_factory.createSMAPctDiffVol()
+    df = pd.concat([df, pct_diff_vol_df], axis=1)
+    percent_diff_vol_cols += pct_diff_vol_df.columns.tolist()
+
+    smaDerivVol_df = ma_factory.createSMADerivativeVol()
+    df = pd.concat([df, smaDerivVol_df], axis=1)
+    percent_diff_vol_cols += smaDerivVol_df.columns.tolist()
+    
     feature_set.sub_categories['volMa_diff'] = percent_diff_vol_cols
     feature_set.cols += percent_diff_vol_cols
 
+    bb_diff_cols = []
 
-    # # % jump from open to high
-    intraday_cols = [] 
-    df['opHi'] = (df.high - df.open) / df.open * 100.0
-    intraday_cols.append('opHi')
+    band_factory = factories['band_factory']
+    bbPctDiff_df = band_factory.createBBPctDiff()
+    df = pd.concat([df, bbPctDiff_df], axis=1)
+    bb_diff_cols += bbPctDiff_df.columns.tolist()
+        
+    feature_set.sub_categories['bb_diff'] = bb_diff_cols
+    feature_set.cols += bb_diff_cols
+
+    intraday_df = ohlcv_factory.createIntraDay()
+    df = pd.concat([df, intraday_df], axis=1)
+    feature_set.sub_categories['intra_day'] = intraday_df.columns.tolist()
+    feature_set.cols += intraday_df.columns.tolist()
     
-
-    # % drop from open to low
-    df['opLo'] = (df.low - df.open) / df.open * 100.0
-    intraday_cols.append('opLo')
-
-    # % drop from high to close
-    df['hiCl'] = (df.close - df.high) / df.high * 100.0
-    intraday_cols.append('hiCl')
-
-    # % raise from low to close
-    df['loCl'] = (df.close - df.low) / df.low * 100.0
-    intraday_cols.append('loCl')
-
-    # % spread from low to high
-    df['hiLo'] = (df.high - df.low) / df.low * 100.0
-    intraday_cols.append('hiLo')
-
-    # % spread from open to close
-    df['opCl'] = (df.close - df.open) / df.open * 100.0
-    intraday_cols.append('opCl')
-
-    # # Calculations for the percentage changes
-    df["pctChgClOp"] = np.insert(np.divide(df.open.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    intraday_cols.append('pctChgClOp')
-
-    df["pctChgClLo"] = np.insert(np.divide(df.low.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    intraday_cols.append('pctChgClLo')
-
-    df["pctChgClHi"] = np.insert(np.divide(df.high.values[1:], df.close.values[0:-1]) * 100.0 - 100.0, 0, np.nan)
-    intraday_cols.append('pctChgClHi')
-
-    feature_set.sub_categories['intra_day'] = intraday_cols
-    feature_set.cols += intraday_cols
-    
-
-    for col in feature_set.cols:
-        df[col] = df[col].fillna(df[col].mean())
-
     return df, feature_set
 
-def create_momentum_vars(df, scaling_method = ScalingMethod.STANDARD):
+def create_momentum_vars(df, factory, scaling_method = ScalingMethod.STANDARD):
     """
     Create momentum variables
     """
@@ -693,25 +671,27 @@ def create_momentum_vars(df, scaling_method = ScalingMethod.STANDARD):
     df = df.copy()
     feature_set = FeatureSet(scaling_method, "momentum_vars")
 
-    series = df.ta.rsi(length=14)
-    series.name = "rsi"
-    df = pd.concat([df, series], axis=1)
-    feature_set.cols.append("rsi")
-    df["rsi"] = df["rsi"].fillna(df["rsi"].mean())
+    momentum_factory = factory['momentum_factory']
+    momentum_cols = []
 
-    macd_df = df.ta.macd(fast=12, slow=26, append = False)
-    print(macd_df.columns)  
-    macd_df.columns = ["macd", "macd_signal", "macd_diff"]
-    print(macd_df.columns) 
+    rsi_df = momentum_factory.createRSI()
+    df = pd.concat([df, rsi_df], axis=1)
+    momentum_cols += rsi_df.columns.tolist()
+
+    macd_df = momentum_factory.createMACD()
     df = pd.concat([df, macd_df], axis=1)
-    feature_set.cols += ["macd", "macd_signal", "macd_diff"]
-    df[macd_df.columns] = df[macd_df.columns].fillna(df[macd_df.columns].mean())
+    momentum_cols += macd_df.columns.tolist()
 
-    stoch_df = df.ta.stoch(high = "high", low = "low", close = "close", append = False)
-    stoch_df.columns = ["stoch_k", "stoch_d"]
+    stoch_df = momentum_factory.createStoch()
+
+    print(f"first date stoch: {stoch_df.index[0]}")
+    print(f"last date stoch: {stoch_df.index[-1]}")
+    print(f"first date df: {df.index[0]}")
+    print(f"last date df: {df.index[-1]}")
     df = pd.concat([df, stoch_df], axis=1)
-    feature_set.cols += ["stoch_k", "stoch_d"]
-    df[stoch_df.columns] = df[stoch_df.columns].fillna(df[stoch_df.columns].mean())
+    momentum_cols += stoch_df.columns.tolist()
+
+    feature_set.cols += momentum_cols
 
     return df, feature_set
 
@@ -810,7 +790,7 @@ def add_forward_rolling_sums(
     :param columns: a list of column names
     :return: the DataFrame with the new columns added
     """
-    feature_set = FeatureSet(scaling_method, "target_vars", ticker=ticker)
+    feature_set = FeatureSet(scaling_method, "target_vars_cumulative", ticker=ticker)
 
     max_shift = -1
 

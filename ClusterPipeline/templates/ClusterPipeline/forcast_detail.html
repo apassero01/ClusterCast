@@ -378,7 +378,9 @@
 
         console.log(closePricesAligned)
 
-        predictionDates.forEach(date => {
+        console.log(percentChange)
+
+        predictionDates.forEach((date) => {
             const position = allDates.indexOf(date);
             if (position !== -1 && predictionStats[date] !== undefined) {
                 medianPredictionsAligned[position] = predictionStats[date].median;
@@ -386,8 +388,17 @@
                 iq3PredictionsAligned[position] = predictionStats[date].median + predictionStats[date].iqr;
             }
         });
-        
 
+        let percentChangeAligned;
+        num_nulls = allDates.length - percentChange.length 
+        if (num_nulls > 0) {
+            const nulls = new Array(num_nulls).fill(null);
+            percentChangeAligned = nulls.concat(percentChange);
+        }
+        else {
+            percentChangeAligned = percentChange;
+        }
+            
         if (predictionDates.length === 0) {
             const closingPricesTrace = {
                 x: closingDates,
@@ -453,11 +464,15 @@
             name: 'Predictions IQR'
         };
 
-        const annotations = predictionDates.map((date, i) => {
+        const annotations = allDatesTrimmed.map((date, i) => {
+            console.log(percentChangeAligned[i])
+            if (percentChangeAligned[i] === null || percentChangeAligned[i] === undefined) {
+                return null;
+            }
             return {
                 x: allDatesTrimmed[i],
                 y: medianPredictionsAligned[i],
-                text: `${percentChange[i].toFixed(2)}%`,
+                text: `${percentChangeAligned[i].toFixed(2)}%`,
                 xshift: 5,  // horizontal shift (in pixels)
                 yshift: 20, // vertical shift (in pixels)
                 showarrow: false,

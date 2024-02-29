@@ -199,10 +199,10 @@ def custom_profit_loss_percent_change(y_true, y_pred):
     loss = -tf.reduce_sum(profits)
     
     # To maximize profit, we minimize the negative sum of profits
-    penalty = tf.reduce_mean(tf.square(y_pred - y_true) * tf.abs(y_true))
+    penalty = tf.reduce_mean(tf.square(y_pred - y_true))
     
     # Combine the loss and the penalty
-    total_loss = loss + penalty/2
+    total_loss = loss + penalty
     
     return total_loss
 
@@ -393,8 +393,10 @@ def eval_model(X_test, y_test_old, model):
     print(predicted_y_old.shape)
     y_test_old = y_test_old[:,-6:]
     
-    predicted_y = np.cumsum(predicted_y_old, axis=1)
-    y_test = np.cumsum(y_test_old, axis=1)
+    # predicted_y = np.cumsum(predicted_y_old, axis=1)
+    # y_test = np.cumsum(y_test_old, axis=1)
+    predicted_y = predicted_y_old
+    y_test = y_test_old
    
 
     num_days = predicted_y.shape[1]  # Assuming this is the number of days
@@ -407,8 +409,12 @@ def eval_model(X_test, y_test_old, model):
     # Generate output string with accuracies
     output_string = f"Cluster Number:\n"
     for i in range(num_days):
+        tolerance = 0.05  # Set your tolerance level
+
+        # Modify the condition for 'same_day'
         results['same_day'] = ((results[f'predicted_{i+1}'] > 0) & (results[f'real_{i+1}'] > 0)) | \
-                ((results[f'predicted_{i+1}'] < 0) & (results[f'real_{i+1}'] < 0))
+                    ((results[f'predicted_{i+1}'] < 0) & (results[f'real_{i+1}'] < 0)) | \
+                    (np.abs(results[f'predicted_{i+1}'] - results[f'real_{i+1}']) < tolerance)
         accuracy = round(results['same_day'].mean() * 100,2)
 
         output_string += (
