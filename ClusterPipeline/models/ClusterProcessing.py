@@ -37,6 +37,7 @@ from ClusterPipeline.models.RNNModels import RNNModel, ModelTypes, StepResult
 from tensorflow.keras.initializers import glorot_uniform, zeros
 from django.dispatch import receiver
 import shutil
+import gc
 
 
 class SupportedParams(models.Model):
@@ -395,14 +396,14 @@ class StockClusterGroup(ClusterGroup):
         """
         Method to create a StockDataSet object from the group_params
         """
-        self.data_sets = []
+        data_sets = []
         for ticker in self.group_params.tickers:
-            self.data_set = StockDataSet(self.group_params, ticker)
-            self.data_set.preprocess_pipeline(to_train=to_train)
-            self.data_sets.append(self.data_set)
-        self.group_params = self.data_sets[0].group_params
+            data_set = StockDataSet(self.group_params, ticker)
+            data_set.preprocess_pipeline(to_train=to_train)
+            data_sets.append(data_set)
+        self.group_params = data_sets[0].group_params
 
-        self.group_params.data_sets = self.data_sets
+        self.group_params.data_sets = data_sets
 
     def create_sequence_set(self):
         """
@@ -679,6 +680,10 @@ class StockClusterGroup(ClusterGroup):
         self.group_params.initialize()
         self.create_data_set()
         self.create_sequence_set()
+        del self.group_params.data_sets
+
+        gc.collect()
+        print("Loading Saved Clusters")
         self.load_saved_clusters()
 
         train_seq_elements = self.group_params.train_seq_elements
@@ -707,6 +712,7 @@ class StockClusterGroup(ClusterGroup):
                 self.group_params.X_feature_dict,
                 self.group_params.y_feature_dict,
             )
+        print("Finished Loading Saved Clusters")
 
 
 class Cluster(models.Model):

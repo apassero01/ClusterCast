@@ -57,29 +57,12 @@ def cluster_run(request):
         feature_sample_num = dataset_params.get("feature_sample_num")
 
         # target_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6']
-        target_features = [
-            "pctChgclose-14_target",
-            "pctChgclose-13_target",
-            "pctChgclose-12_target",
-            "pctChgclose-11_target",
-            "pctChgclose-10_target",
-            "pctChgclose-9_target",
-            "pctChgclose-8_target",
-            "pctChgclose-7_target",
-            "pctChgclose-6_target",
-            "pctChgclose-5_target",
-            "pctChgclose-4_target",
-            "pctChgclose-3_target",
-            "pctChgclose-2_target",
-            "pctChgclose-1_target",
-            "pctChgclose-0_target",
-            "pctChgclose+1_target",
-            "pctChgclose+2_target",
-            "pctChgclose+3_target",
-            "pctChgclose+4_target",
-            "pctChgclose+5_target",
-            "pctChgclose+6_target",
-        ]
+
+        target_features = [] 
+        # target_features += ['pctChgclose{}_target'.format(i) for i in range(-14, 0) ]
+        # target_features += ['pctChgclose-0_target']
+        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 16) ]
+
 
         scaling_dict = {
             "price_vars": SP.ScalingMethod.UNSCALED,

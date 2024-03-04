@@ -382,21 +382,22 @@ def train_model(
 
 import pandas as pd 
 import numpy as np
-def eval_model(X_test, y_test_old, model):
+def eval_model(X_test, y_test_old, model, num_days=6):
 
     predicted_y_old = model.predict(X_test)
     predicted_y_old = np.squeeze(predicted_y_old, axis=-1)
 
     print(predicted_y_old.shape)
 
-    predicted_y_old = predicted_y_old[:,-6:]
-    print(predicted_y_old.shape)
-    y_test_old = y_test_old[:,-6:]
+    if len(predicted_y_old[0]) > num_days:
+        predicted_y_old = predicted_y_old[:,-num_days:]
+        print(predicted_y_old.shape)
+        y_test_old = y_test_old[:,-num_days:]
     
-    # predicted_y = np.cumsum(predicted_y_old, axis=1)
-    # y_test = np.cumsum(y_test_old, axis=1)
-    predicted_y = predicted_y_old
-    y_test = y_test_old
+    predicted_y = np.cumsum(predicted_y_old, axis=1)
+    y_test = np.cumsum(y_test_old, axis=1)
+    # predicted_y = predicted_y_old
+    # y_test = y_test_old
    
 
     num_days = predicted_y.shape[1]  # Assuming this is the number of days
@@ -425,7 +426,7 @@ def eval_model(X_test, y_test_old, model):
     
     output_string += f"Train set length:  Test set length: {len(y_test)}\n"
 
-    return output_string, results
+    return output_string, results, predicted_y_old
 
 
 import plotly.graph_objects as go
@@ -437,7 +438,7 @@ def visualize_future_distribution(results):
     fig = go.Figure()
     print(results.shape)
 
-    for i in range(6):
+    for i in range(len(results.columns) //2):
 
         fig.add_trace(go.Box(y=results[f'predicted_{i+1}'], name=f'Predicted {i}')) 
         fig.add_trace(go.Box(y=results[f'real_{i+1}'], name=f'Real {i}'))

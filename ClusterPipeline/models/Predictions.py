@@ -23,6 +23,7 @@ from tslearn.metrics import dtw
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from itertools import accumulate
+import gc
 
 
 def prediction_directory_path(instance, filename):
@@ -128,6 +129,8 @@ class StockPrediction(Prediction):
                     or rnn_prediction.end_date > self.final_prediction_date
                 ):
                     self.final_prediction_date = rnn_prediction.end_date
+            del cluster_group
+            gc.collect()
 
         return all_rnn_predictions
 
@@ -233,27 +236,27 @@ class StockPrediction(Prediction):
                     end_date, periods=len(cur_prediction) + 1, freq=self.market_calendar
                 )[1:].tolist()
 
-                if model.target_feature_type == "lag": 
-                    target_feature_set = [feature_set for feature_set in sequence_set.group_params.y_feature_sets if feature_set.name == "lag_target_vars"][0]
-                else:
-                    target_feature_set = [feature_set for feature_set in sequence_set.group_params.y_feature_sets if feature_set.name == "target_vars_cumulative"][0]
+                cur_prediction_transformed = np.zeros_like(cur_prediction)
+                for i,feature in enumerate(cluster_group.group_params.target_cols):
+                    scaler = [feature_set for feature_set in cluster_group.group_params.y_feature_sets if feature_set.name == feature][0].scaler
+                    cur_prediction_transformed[i] = scaler.inverse_transform(cur_prediction[i].reshape(-1,1)).squeeze()
 
-                target_scaler = target_feature_set.scaler
 
                 end_day_close = self.generic_dataset.test_df.loc[end_date]["close"]
                 print("PRESCALED PREDICTION")
                 print(cur_prediction)
-                cur_prediction = target_scaler.inverse_transform(cur_prediction)
-                print("AFter transform")
-                print(cur_prediction)
+
 
                 if model.target_feature_type == "lag":
-                    cur_prediction = list(accumulate(cur_prediction[-6:]))
+                    if len(cur_prediction == 15):
+                        cur_prediction_transformed = list(accumulate(cur_prediction_transformed[-15:]))
+                    else:
+                        cur_prediction_transformed = list(accumulate(cur_prediction_transformed[-6:]))
 
                 price_predictions = []
                 daily_accuracy = []
                 step_results = StepResult.objects.filter(RNNModel=model)
-                for pred, step_result in zip(cur_prediction, step_results):
+                for pred, step_result in zip(cur_prediction_transformed, step_results):
                     if step_result.dir_accuracy < individual_model_accuracy_thresh:
                         price_predictions.append(None)
                         continue

@@ -295,8 +295,8 @@ class RNNModel(models.Model):
         predicted_y = np.squeeze(predicted_y, axis=-1)
 
         if self.target_feature_type == 'lag':
-            predicted_y = predicted_y[:,-6:]
-            self.y_test = self.y_test[:,-6:]
+            predicted_y = predicted_y[:,-15:]
+            self.y_test = self.y_test[:,-15:]
 
             predicted_y = np.cumsum(predicted_y,axis=1)
             self.y_test = np.cumsum(self.y_test,axis=1)
@@ -512,7 +512,7 @@ def create_modelAE(input_shape, latent_dim=6):
     # attention_weights = Activation('softmax')(attention)
     # context = Multiply()([encoder_lstm4, Permute([2, 1])(RepeatVector(6)(attention_weights))])
 
-    decoder_inputs = RepeatVector(21, name='repeat_vector')(encoder_states4[0])
+    decoder_inputs = RepeatVector(15, name='repeat_vector')(encoder_states4[0])
     
 
     # Decoder

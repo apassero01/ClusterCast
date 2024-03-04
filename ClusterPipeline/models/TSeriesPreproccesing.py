@@ -178,6 +178,9 @@ class StockDataSet(DataSet):
             )  # TODO remove this when strong predictors are implemented
 
             print("RandomForest Compete")
+        
+        self.training_df = self.downcast_columns(self.training_df)
+        self.test_df = self.downcast_columns(self.test_df)
 
         if len(self.group_params.X_cols) < 1:
             raise ValueError("No features created")
@@ -190,6 +193,8 @@ class StockDataSet(DataSet):
 
         self.group_params.X_feature_sets += self.X_feature_sets
         self.group_params.y_feature_sets += self.y_feature_sets
+
+        
 
         if self.training_df.isna().any().any():
              # Identifying columns with NaN values
@@ -386,29 +391,37 @@ class StockDataSet(DataSet):
         
         rolling_features = ['sumpctChgclose_1','sumpctChgclose_2','sumpctChgclose_3','sumpctChgclose_4','sumpctChgclose_5','sumpctChgclose_6','sumpctChgclose_7','sumpctChgclose_8','sumpctChgclose_9','sumpctChgclose_10','sumpctChgclose_11','sumpctChgclose_12','sumpctChgclose_13','sumpctChgclose_14','sumpctChgclose_15']
 
+        y_feature_sets = []
+
+        self.df, feature_sets = add_forward_rolling_sums(self.df, rolling_features, scaling_method=self.scaling_dict['target_vars'],ticker=self.ticker)
+
+        y_feature_sets += feature_sets
         
-        self.df, feature_set = add_forward_rolling_sums(self.df, rolling_features, scaling_method=self.scaling_dict['target_vars'],ticker=self.ticker)
 
-        self.y_feature_sets.append(feature_set)
-        self.group_params.y_cols.update(feature_set.cols)
+        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -15, end_lag = -1, ticker = self.ticker)
+        y_feature_sets += feature_sets
 
-        # print(self.df.columns.tolist())
-
-        pctChg_target_f_set = FeatureSet(scaling_method = self.scaling_dict['target_vars'], name = "lag_target_vars", ticker = self.ticker, percentiles = [10,90])
-
-        self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -6, end_lag = -1, ticker = self.ticker)
-        pctChg_target_f_set.cols += feature_set.cols
-
-        self.df, feature_set = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 14, ticker = self.ticker)
-        pctChg_target_f_set.cols += feature_set.cols
-
-        self.y_feature_sets.append(pctChg_target_f_set)
-        self.group_params.y_cols.update(pctChg_target_f_set.cols)
-        print("TARGETS IN THE FEATURE SETS \n")
-        print(pctChg_target_f_set.cols)
+        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 14, ticker = self.ticker)
+        y_feature_sets += feature_sets
+        
+        for feature_set in y_feature_sets:
+            self.y_feature_sets.append(feature_set)
+            self.group_params.y_cols.update(feature_set.cols)
 
 
         self.created_y_targets = True 
+
+    def downcast_columns(self, df):
+        """
+        Downcast the columns in the dataframe to the smallest possible datatype
+        """
+        for col in df.columns:
+            if df[col].dtype == "float64":
+                df[col] = pd.to_numeric(df[col], downcast="float")
+            if df[col].dtype == "int64":
+                df[col] = pd.to_numeric(df[col], downcast="integer")
+        print(df.dtypes)
+        return df
 
 
     def strong_predictors_rf(self, num_features = 10): 
@@ -790,7 +803,7 @@ def add_forward_rolling_sums(
     :param columns: a list of column names
     :return: the DataFrame with the new columns added
     """
-    feature_set = FeatureSet(scaling_method, "target_vars_cumulative", ticker=ticker)
+    feature_sets = [] 
 
     max_shift = -1
 
@@ -800,6 +813,9 @@ def add_forward_rolling_sums(
 
         # Create a new column name based on X
         new_col_name = "sumPctChgclose+" + str(num_rows_ahead)
+
+        feature_set = FeatureSet(scaling_method, new_col_name, ticker=ticker)
+
         feature_set.cols.append(new_col_name)
         # Shift the column values by -X to fetch the value X rows ahead
 
@@ -808,8 +824,9 @@ def add_forward_rolling_sums(
         df[new_col_name] = shifted_col
 
         max_shift = max(max_shift, num_rows_ahead)
+        feature_sets.append(feature_set)
 
-    return df, feature_set
+    return df, feature_sets
 
 
 def create_lag_vars_target(
@@ -826,19 +843,24 @@ def create_lag_vars_target(
     """
     df = df.copy()
 
-    feature_set = FeatureSet(scaling_method=scaling_method, name = "lag_target_vars", ticker = ticker)
-
+    feature_sets = [] 
     df_lags = pd.DataFrame(index=df.index)
     for lag in range(start_lag, end_lag + 1):
         for var in cols_to_create_lags:
             if lag >= 0:
-                df_lags[var + "-" + str(lag) + "_target"] = pd.Series(df[var].shift(lag),
+                new_col_name = var + "-" + str(lag) + "_target"
+                df_lags[new_col_name] = pd.Series(df[var].shift(lag),
                                                         index=df.index[(lag):])
                 # replace nans with mean in this col
-                df_lags[var + "-" + str(lag)+ "_target"] = df_lags[var + "-" + str(lag)+ "_target"].fillna(df_lags[var + "-" + str(lag)+ "_target"].mean())
+                df_lags[new_col_name] = df_lags[var + "-" + str(lag)+ "_target"].fillna(df_lags[var + "-" + str(lag)+ "_target"].mean())
             elif lag <= -1:
-                df_lags[var + "+" + str(lag * -1)+ "_target"] = pd.Series(df[var].shift(lag),
+                new_col_name = var + "+" + str(lag * -1) + "_target"
+                df_lags[new_col_name] = pd.Series(df[var].shift(lag),
                                                             index=df.index[:(lag)])
+                df_lags[new_col_name] = df_lags[new_col_name].fillna(df_lags[new_col_name].mean())
+            feature_set = FeatureSet(scaling_method=scaling_method, name = new_col_name, ticker = ticker)
+            feature_set.cols.append(new_col_name)
+            feature_sets.append(feature_set)
 
     # Reverse the columns if shifting ahead
     if start_lag < 0:
@@ -849,9 +871,7 @@ def create_lag_vars_target(
     # concat the new DataFrame to the original DataFrame
     df = pd.concat([df, df_lags], axis=1)
 
-    feature_set.cols = df_lags.columns.tolist()
-
-    return df, feature_set
+    return df, feature_sets
 
 
 def create_lag_vars_features(

@@ -10,6 +10,8 @@ from collections import Counter
 from django.db import models
 import json
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+import matplotlib.pyplot as plt
+from itertools import accumulate
 
 
 class SequenceElement:
@@ -76,6 +78,69 @@ class SequenceElement:
         X = pad_sequences(X, maxlen=max_length, padding="post", dtype="float32")
 
         return X, y
+    
+    def visualize_future_movement(sequence_element, prediction_change, scaler, isCuma = False, target_features = None, num_days = 6):
+        """
+        Visualizes the sequence
+        """
+        # target_cols = target_feature_set.cols 
+        actual_values_change = SequenceElement.filter_y_by_features(sequence_element.seq_y, target_features, sequence_element.y_feature_dict)
+        print(actual_values_change.shape)
+        actual_values_change = scaler.inverse_transform(actual_values_change)
+
+
+
+        if not isCuma: 
+            prediction_change = prediction_change[-num_days:]
+            actual_values_change = actual_values_change[-num_days:]
+            prediction_change = list(accumulate(prediction_change))
+            actual_values_change = list(accumulate(actual_values_change))
+
+        print(len(prediction_change))
+
+        
+        close_price = SequenceElement.filter_by_features(sequence_element.seq_x, ['close'], sequence_element.x_feature_dict)
+        close_price = close_price[:, 0]
+
+        actual_values = [close_price[-1] + close_price[-1]*x/100 for x in actual_values_change]
+        prediction = [close_price[-1] + close_price[-1]*x/100 for x in prediction_change]
+
+        print(actual_values)
+        
+
+        fig = plt.figure(figsize=(10, 5))
+
+        seq_x_indices = list(range(len(close_price)))
+        seq_y_indices_indices = list(range(1+len(close_price), 1+len(close_price)+len(actual_values)))  
+
+        plt.plot(seq_x_indices, close_price, label='Close Price',)
+        plt.plot(seq_y_indices_indices, actual_values, label='Actual',marker='o')
+        plt.plot(seq_y_indices_indices, prediction, label='Prediction',marker='o')
+        plt.legend()
+        # add start date label to index 0
+        plt.xticks([0, 1+len(close_price)], [sequence_element.start_date, sequence_element.end_date])
+
+
+        plt.show()
+
+    def filter_by_features(seq, feature_list, X_feature_dict):
+        seq = seq.copy()
+        indices = [X_feature_dict[x] for x in feature_list]
+        # Using numpy's advanced indexing to select the required features
+        return seq[:, indices]
+
+    
+
+    def filter_y_by_features(seq, feature_list, y_feature_dict):
+        '''
+        Method to filter a 3d array of sequences by a list of features.
+        '''
+        seq = seq.copy()
+        indices = [y_feature_dict[x] for x in feature_list]
+        # Using numpy's advanced indexing to select the required features
+        return seq[indices]
+
+    
 
     def __repr__(self) -> str:
         """
@@ -382,6 +447,8 @@ class StockSequenceSet(SequenceSet):
             X_feauture_sets, X_feature_dict = self.create_cuma_pctChg_features()
             self.group_params.X_feature_sets += X_feauture_sets
             self.group_params.X_feature_dict = X_feature_dict
+        
+        print("Sequence Preprocessing Complete")
 
     def create_cuma_pctChg_features(self):
         new_feature_sets = []
@@ -630,6 +697,7 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
     X_feature_dict = {col: index for col, index in zip(X_cols_list, X_indices_seq)}
     y_feature_dict = {col: index for col, index in zip(y_cols_list, y_indices_seq)}
 
+    print("y_feature_dict")
     print(y_feature_dict)
     print([df_cols.columns.get_loc(col) for col in y_cols_list])
 
