@@ -390,9 +390,9 @@ class StockPrediction(Prediction):
 
         scaling_dict = {
             "price_vars": ScalingMethod.UNSCALED,
-            "trend_vars": ScalingMethod.SBS,
-            "pctChg_vars": ScalingMethod.QUANT_MINMAX,
-            "rolling_vars": ScalingMethod.QUANT_MINMAX,
+            "trend_vars": ScalingMethod.UNSCALED,
+            "pctChg_vars": ScalingMethod.STANDARD,
+            "rolling_vars": ScalingMethod.STANDARD,
             "target_vars": ScalingMethod.QUANT_MINMAX,
             "lag_feature_vars": ScalingMethod.STANDARD,
             "momentum_vars": ScalingMethod.STANDARD,

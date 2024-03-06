@@ -232,7 +232,7 @@ class RNNModel(models.Model):
         new_model.compile(loss="mse", optimizer=Adam(learning_rate=0.0001))
         self.model = new_model
 
-    def fit(self, epochs=100, batch_size=16):
+    def fit(self, epochs=100, batch_size=5):
         # After building the model
 
         summary_string_list = []
@@ -275,6 +275,7 @@ class RNNModel(models.Model):
             batch_size=batch_size,
             validation_data=(self.X_test, self.y_test),
             callbacks=callbacks,
+            shuffle = False
         )
 
         stopped_epoch = early_stopping.stopped_epoch

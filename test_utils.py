@@ -28,12 +28,13 @@ from tensorflow.keras.layers import (
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 import keras.backend as K
-from keras.layers import Layer
+from keras.layers import Layer, Lambda
 from keras.layers import Activation, Flatten
 from tensorflow.keras.regularizers import L1, L2, L1L2
 import tensorflow as tf
 import datetime
 from importlib import reload
+import seaborn as sns
 
 
 @sync_to_async
@@ -215,7 +216,10 @@ def attention_mechanism(encoder_outputs, decoder_state):
     score = score + encoder_outputs  # Add to encoder outputs
     attention_weights = Activation("softmax")(score)  # Compute attention weights
     context_vector = tf.reduce_sum(attention_weights * encoder_outputs, axis=1)
-    return context_vector
+    return context_vector, attention_weights
+
+def no_training_output(tensor):
+    return K.stop_gradient(tensor)  # This halts gradients for the tensor
 
 
 def create_attention_model(input_steps, output_steps, features):
@@ -224,14 +228,14 @@ def create_attention_model(input_steps, output_steps, features):
     encoder_inputs = Input(shape=(input_steps, features))
 
     encoder_lstm1 = LSTM(
-        200,
+        20,
         return_sequences=True,
         kernel_regularizer=L2(0.01),
         recurrent_regularizer=L2(0.01),
     )
     encoder_output1 = encoder_lstm1(encoder_inputs)
 
-    encoder_lstm_final = LSTM(100, return_state=True, return_sequences=True)
+    encoder_lstm_final = LSTM(20, return_state=True, return_sequences=True)
     encoder_outputs, state_h, state_c = encoder_lstm_final(encoder_output1)
 
     # Decoder
@@ -239,7 +243,7 @@ def create_attention_model(input_steps, output_steps, features):
         state_h
     )  # Prepare decoder inputs
 
-    decoder_lstm = LSTM(100, return_sequences=True)
+    decoder_lstm = LSTM(20, return_sequences=True)
     decoder_output1 = decoder_lstm(
         decoder_initial_input, initial_state=[state_h, state_c]
     )
@@ -248,7 +252,7 @@ def create_attention_model(input_steps, output_steps, features):
     context_vectors_list1 = []
     for t in range(output_steps):
         # Apply attention mechanism
-        context_vector_t1 = attention_mechanism(
+        context_vector_t1, attention_weights_t1 = attention_mechanism(
             encoder_outputs, decoder_output1[:, t, :]
         )
         context_vectors_list1.append(context_vector_t1)
@@ -259,32 +263,43 @@ def create_attention_model(input_steps, output_steps, features):
     # Concatenate context vectors with decoder outputs
     decoder_combined_context1 = Concatenate(axis=-1)([context_vectors, decoder_output1])
 
-    decoder_lstm2 = LSTM(50, return_sequences=True)
+    decoder_lstm2 = LSTM(10, return_sequences=True)
     decoder_output2 = decoder_lstm2(decoder_combined_context1)
 
     # Manually apply attention mechanism for each timestep
     context_vectors_list2 = []
+    attention_weights_list2 = []
     for t in range(output_steps):
         # Apply attention mechanism
-        context_vector_t2 = attention_mechanism(
+        context_vector_t2, attention_weights_t2 = attention_mechanism(
             encoder_outputs, decoder_output2[:, t, :]
         )
         context_vectors_list2.append(context_vector_t2)
+        attention_weights_list2.append(attention_weights_t2)
+
 
     # Concatenate the list of context vectors
     context_vectors2 = tf.stack(context_vectors_list2, axis=1)
     decoder_combined_context2 = Concatenate(axis=-1)(
         [context_vectors2, decoder_output2]
     )
+    attention_weights = tf.stack(attention_weights_list2, axis=1)
+
+    attention_weights_output = Lambda(lambda x: K.stop_gradient(x))(attention_weights)
 
     # Output layer for reconstruction
-    output = TimeDistributed(Dense(1))(decoder_combined_context2)
+    # output = TimeDistributed(Dense(1))(decoder_combined_context2)
+
+    main_output = TimeDistributed(Dense(1))(decoder_combined_context2)
 
     # Create and compile the model
-    model = Model(inputs=encoder_inputs, outputs=output)
-    model.compile(optimizer="adam", loss="mse")  # Use appropriate loss
+    training_model = Model(inputs=encoder_inputs, outputs=main_output)
+    training_model.compile(optimizer="adam", loss="mse")  # Use appropriate loss
 
-    return model
+    test_model = Model(inputs=encoder_inputs, outputs=[main_output, attention_weights_output])
+    test_model.compile(optimizer="adam", loss="mse")  # Use appropriate loss
+
+    return training_model, test_model
 
 
 def custom_loss_function(y_true, y_pred, past_steps, future_weight):
@@ -377,6 +392,8 @@ def train_model(
         epochs=epochs,
         batch_size=batch_size,
         callbacks=[tensorboard_callback,early_stopping],
+        shuffle = False
+
     )
     return model
 
@@ -384,7 +401,11 @@ import pandas as pd
 import numpy as np
 def eval_model(X_test, y_test_old, model, num_days=6):
 
-    predicted_y_old = model.predict(X_test)
+    model_output = model.predict(X_test)
+    print(type(model_output), len(model_output))
+    predicted_y_old = model_output[0]
+    attention_weights = model_output[1]
+    
     predicted_y_old = np.squeeze(predicted_y_old, axis=-1)
 
     print(predicted_y_old.shape)
@@ -426,7 +447,7 @@ def eval_model(X_test, y_test_old, model, num_days=6):
     
     output_string += f"Train set length:  Test set length: {len(y_test)}\n"
 
-    return output_string, results, predicted_y_old
+    return output_string, results, predicted_y_old, attention_weights
 
 
 import plotly.graph_objects as go
@@ -515,3 +536,23 @@ def reconstruct_sequence_elements(X_train, y_train, X_test, y_test, X_feature_di
         test_seq_elements.append(seq_element)
 
     return training_seq_elements, test_seq_elements
+
+
+
+def plot_attention_weights(attention_weights):
+    # Assuming attention_weights is a NumPy array of shape (output_steps, input_steps, neurons)
+
+    fig = plt.figure(figsize=(10, 6))
+    attention_avg = np.mean(attention_weights, axis=0)
+
+    # Transpose attention_avg to switch x and y axis
+    attention_avg = attention_avg.T  # Now shape is (neurons, input_steps)
+
+    # Plotting the heatmap
+    sns.heatmap(attention_avg, cmap='viridis')
+    plt.xlabel('Input Steps')
+    plt.ylabel('Neurons')
+    plt.title('Attention Weights Heatmap')
+    plt.show()
+
+    return fig

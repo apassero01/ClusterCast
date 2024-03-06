@@ -302,8 +302,6 @@ class StockDataSet(DataSet):
 
         self.created_features = True
 
-        print(self.df.columns.tolist())
-
     def train_test_split(self, feature_list=None, training_percentage=0.8):
 
         if not feature_list:

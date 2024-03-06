@@ -221,6 +221,15 @@ def cluster_detail(request, group_id, cluster_id):
         request, "ClusterPipeline/cluster_detail.html", {"results": model_results}
     )
 
+def get_model(request, group_id, cluster_id, model_id): 
+    cluster_group = get_cluster_group(group_id)
+    cluster = cluster_group.get_cluster(cluster_id)
+    model = cluster.get_model(model_id)
+
+    cluster_sequences = cluster.get_cluster_average() 
+
+    model_results = model.generate_results()
+
 
 @csrf_exempt
 def train_new_models(request, group_id, cluster_id):

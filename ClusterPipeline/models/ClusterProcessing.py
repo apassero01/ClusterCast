@@ -713,6 +713,15 @@ class StockClusterGroup(ClusterGroup):
                 self.group_params.y_feature_dict,
             )
         print("Finished Loading Saved Clusters")
+    
+    def get_cluster(self,cluster_id):
+        '''
+        Method to get a cluster by its id. We need the cluster to be loaded so we need to 
+        avoid querying from the database again as clusters from the database are not fully loaded in
+        '''
+        for cluster in self.clusters:
+            if cluster.id == cluster_id:
+                return cluster
 
 
 class Cluster(models.Model):
@@ -766,6 +775,15 @@ class Cluster(models.Model):
         self.X_test, self.y_test = SequenceElement.create_array(self.test_seq_elements)
 
         return self.X_train, self.y_train, self.X_test, self.y_test
+    
+    def get_model(self, model_id):
+        '''
+        Method to get a model by its id. We need the model to be loaded so we need to 
+        avoid querying from the database again as models from the database are not fully loaded in
+        '''
+        for model in self.models:
+            if model.id == model_id:
+                return model
 
 
 class StockCluster(Cluster):
@@ -861,6 +879,29 @@ class StockCluster(Cluster):
         )
 
         return fig
+    
+    def get_cluster_average(self, isTrain=True):
+        if isTrain:
+            arr_3d = self.X_train
+        else:
+            arr_3d = self.X_test
+
+        cluster_features = self.cluster_group.group_params.cluster_features
+
+        X_cluster = self.cluster_group.filter_by_features(
+            arr_3d,
+            self.cluster_group.group_params.cluster_features,
+            self.X_feature_dict,
+        )
+        avg_cluster = np.mean(X_cluster, axis=0)
+
+        sequence_dict = {}
+        for feature_idx in range(avg_cluster.shape[1]):
+            feature = cluster_features[feature_idx]
+            sequence = avg_cluster[:, feature_idx]
+            sequence_dict[feature] = sequence
+        
+        return sequence_dict
 
     def visualize_cluster_2d(self, isTrain=True, y_range=[0, 1]):
         if isTrain:
@@ -1034,7 +1075,7 @@ class StockCluster(Cluster):
                         raise ValueError("Invalid Layer Type")
 
                 model.buildModel()
-                model.fit(epochs=100, batch_size=16)
+                model.fit(epochs=100, batch_size=7)
                 model.evaluate_test()
                 model.compute_average_accuracy()
                 model.serialize()
