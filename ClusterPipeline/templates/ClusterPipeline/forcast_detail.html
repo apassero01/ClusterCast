@@ -330,7 +330,7 @@
             // Compute stats only if there are numeric values
             if (numericValues.length > 0) {
                 dateStats[date] = {
-                    median: computeMedian(numericValues),
+                    median: calculateMean(numericValues),
                     iqr: computeIQR(numericValues)
                 };
             }
@@ -353,7 +353,7 @@
         const medianPredictions = Object.values(predictionStats).map(stat => stat.median);
         const iq1Predictions = Object.values(predictionStats).map(stat => stat.median - stat.iqr);
         const iq3Predictions = Object.values(predictionStats).map(stat => stat.median + stat.iqr);
-        console.log(predictionStats)
+        // console.log(predictionStats)
 
         // For percentChange calculation, ensure 'closePrices' is an array of numbers and has at least one price
         const lastClosePrice = closePrices[closePrices.length - 1]; // Get the last close price just once to use in calculation
@@ -504,7 +504,7 @@
             const active_stats = processPredictionData(organized_active);
             let active_dates = Object.keys(organized_active).map(key => key);
             const active_median = Object.values(active_stats).map(stat => stat.median);
-            console.log(active_median)
+            // console.log(active_median)
 
             activeMedianAligned = new Array(allDates.length).fill(null);
 
@@ -630,9 +630,9 @@
 
             document.querySelectorAll('.graph-stats-container').forEach((container,index) => {
                 container.width = '100%';
-                console.log(`index: ${index} `);
-                console.log(`model_ids[index]: ${model_ids[index]} `);
-                console.log(`predictionStartDateStr: ${predictionStartDateStr} `);
+                // console.log(`index: ${index} `);
+                // console.log(`model_ids[index]: ${model_ids[index]} `);
+                // console.log(`predictionStartDateStr: ${predictionStartDateStr} `);
 
                 results = prediction['results'];
                 const modelPrediction = results.find(row => (row.model_id) === (model_ids[index]));
@@ -686,6 +686,10 @@
 
     function calculateMean(arr) {
         const sum = arr.reduce((acc, val) => acc + val, 0);
+        console.log(arr)
+        console.log("MEAN")
+        console.log(sum/arr.length )
+
         return sum / arr.length;
     }
 
@@ -834,7 +838,7 @@
         stock_predictions.forEach(prediction => {
             prediction.results.forEach(row => {
                 const rand = Math.random();
-                console.log(rand)
+                // console.log(rand)
                 if (rand < switchProbability && row.status !== 1) {
                     console.log('Switching')
                     // Perform the switch/action only 20% of the time

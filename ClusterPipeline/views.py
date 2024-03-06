@@ -435,9 +435,14 @@ def forcast_detail(request, forcast_id, prediction_start_date, prediction_end_da
         prediction_start_date, prediction_end_date
     )
 
+    if prediction_start_date < datetime.today() - timedelta(days=30):
+        close_start_date = prediction_start_date
+    else:
+        close_start_date = datetime.today() - timedelta(days=30)
+
     close_df = yf.download(
         prediction.ticker,
-        start=(prediction_start_date + timedelta(days=-20)).strftime("%Y-%m-%d"),
+        start=close_start_date.strftime("%Y-%m-%d"),
         end=(date.today() + timedelta(days=1)).strftime("%Y-%m-%d"),
         interval=prediction.interval,
     )
