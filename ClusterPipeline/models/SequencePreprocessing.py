@@ -11,7 +11,10 @@ from django.db import models
 import json
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import matplotlib.pyplot as plt
+import mplfinance as mpf
 from itertools import accumulate
+from pandas.tseries.holiday import USFederalHolidayCalendar
+from pandas.tseries.offsets import CustomBusinessDay
 
 
 class SequenceElement:
@@ -79,7 +82,7 @@ class SequenceElement:
 
         return X, y
     
-    def visualize_future_movement(sequence_element, prediction_change, scaler, isCuma = False, target_features = None, num_days = 6):
+    def visualize_future_movement_mpl(sequence_element, prediction_change, scaler, isCuma = False, target_features = None, num_days = 6):
         """
         Visualizes the sequence
         """
@@ -97,31 +100,72 @@ class SequenceElement:
             actual_values_change = list(accumulate(actual_values_change))
 
         print(len(prediction_change))
-
         
-        close_price = SequenceElement.filter_by_features(sequence_element.seq_x, ['close'], sequence_element.x_feature_dict)
-        close_price = close_price[:, 0]
+        ohlc_data = SequenceElement.filter_by_features(sequence_element.seq_x, ['open', 'high', 'low', 'close', 'volume', 'ema50'], sequence_element.x_feature_dict)
+        data = {
+            'Open': ohlc_data[:, 0],
+            'High': ohlc_data[:, 1],
+            'Low': ohlc_data[:, 2],
+            'Close': ohlc_data[:, 3],
+            'Volume': ohlc_data[:, 4],
+            'ema50': ohlc_data[:, 5]
+        }
 
-        actual_values = [close_price[-1] + close_price[-1]*x/100 for x in actual_values_change]
-        prediction = [close_price[-1] + close_price[-1]*x/100 for x in prediction_change]
+        holiday_calendar = USFederalHolidayCalendar()
+        holidays = holiday_calendar.holidays()
+        market_calendar = CustomBusinessDay(calendar=holiday_calendar)
 
-        print(actual_values)
+        start_date = sequence_element.start_date
+        end_date = sequence_element.end_date
+        historical_dates = pd.date_range(start=start_date, end=end_date, freq=market_calendar)
+
+        if len(historical_dates) != len(data['Close']):
+            if len(historical_dates) > len(data['Close']):
+                historical_dates = historical_dates[:len(data['Close'])]
+            else:
+                extra_dates = pd.date_range(start=historical_dates[-1], periods=len(data['Close']) - len(historical_dates)+1, freq=market_calendar)[1:]
+                print(extra_dates)
+                historical_dates = np.concatenate([historical_dates, extra_dates])
+        historical_df = pd.DataFrame(data, index=historical_dates)
+
+        last_close = historical_df['Close'][-1]
+
+
+
+        actual_values = [last_close + last_close*x/100 for x in actual_values_change]
+        prediction = [last_close + last_close*x/100 for x in prediction_change]
         
+        temp_future_dates = pd.date_range(start=historical_dates[-1], periods=len(actual_values) + 1, freq=market_calendar)
 
-        fig = plt.figure(figsize=(10, 5))
+        # If the first date in temp_future_dates is the same as the last date in historical_dates, exclude it
+        if temp_future_dates[0] == historical_dates[-1]:
+            future_dates = temp_future_dates[1:]
+        else:
+            future_dates = temp_future_dates[:-1]
 
-        seq_x_indices = list(range(len(close_price)))
-        seq_y_indices_indices = list(range(1+len(close_price), 1+len(close_price)+len(actual_values)))  
+        actual_series = pd.Series(data=actual_values, index=future_dates)
+        prediction_series = pd.Series(data=prediction, index=future_dates)
 
-        plt.plot(seq_x_indices, close_price, label='Close Price',)
-        plt.plot(seq_y_indices_indices, actual_values, label='Actual',marker='o')
-        plt.plot(seq_y_indices_indices, prediction, label='Prediction',marker='o')
-        plt.legend()
-        # add start date label to index 0
-        plt.xticks([0, 1+len(close_price)], [sequence_element.start_date, sequence_element.end_date])
+        extended_actual_values = np.concatenate([np.full(len(historical_dates), np.nan), actual_series])
+        extended_prediction_values = np.concatenate([np.full(len(historical_dates), np.nan), prediction_series])
 
 
-        plt.show()
+        actual_plot = mpf.make_addplot(extended_actual_values, type='line', markersize=50, marker='o', 
+                                    color='green', linestyle='-', label='Actual')
+
+        prediction_plot = mpf.make_addplot(extended_prediction_values, type='line', markersize=50, marker='o', 
+                                        color='red', linestyle='-', label='Predicted')
+
+        # Define the mplfinance style
+        style = mpf.make_mpf_style(base_mpf_style='default', rc={'figure.figsize': (8, 4)})
+
+        combined_df = pd.concat([historical_df, pd.DataFrame(index=future_dates)], sort=False)
+
+        ema_plot = mpf.make_addplot(combined_df['ema50'], color='blue', label='EMA50')
+
+        # Plot the data
+        mpf.plot(combined_df, type='candle', style=style, addplot=[actual_plot, prediction_plot, ema_plot],
+                figscale=1.5, volume=True)
 
     def filter_by_features(seq, feature_list, X_feature_dict):
         seq = seq.copy()
@@ -229,8 +273,8 @@ class StockSequenceSet(SequenceSet):
                     y_feature_dict,
                     future_elements,
                 ) = create_sequence(test_set, X_cols, y_cols, n, ticker, isTrain=False)
-                train_seq_elements += train_elements
-                test_seq_elements += test_elements
+                train_seq_elements += train_elements[::-1]
+                test_seq_elements += test_elements[::-1]
                 future_seq_elements += future_elements
 
         x_quant_min_max_feature_sets = []
@@ -697,9 +741,6 @@ def create_sequence(df, X_cols, y_cols, n_steps, ticker, isTrain):
     X_feature_dict = {col: index for col, index in zip(X_cols_list, X_indices_seq)}
     y_feature_dict = {col: index for col, index in zip(y_cols_list, y_indices_seq)}
 
-    print("y_feature_dict")
-    print(y_feature_dict)
-    print([df_cols.columns.get_loc(col) for col in y_cols_list])
 
     sequence_elements = []
     future_seq_elements = []

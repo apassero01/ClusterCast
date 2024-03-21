@@ -13,6 +13,7 @@ from tslearn.clustering import TimeSeriesKMeans
 from copy import deepcopy
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.backend import clear_session
+from tslearn.metrics import dtw
 from tensorflow.keras.layers import (
     Input,
     LSTM,
@@ -35,6 +36,7 @@ import tensorflow as tf
 import datetime
 from importlib import reload
 import seaborn as sns
+import plotly.graph_objects as go
 
 
 @sync_to_async
@@ -54,6 +56,15 @@ def get_all_clusters(groups):
         clusters += group.clusters
 
     return clusters
+@sync_to_async
+def get_best_model(cluster):
+    return cluster.get_best_model() 
+
+@sync_to_async
+def get_model(cluster,model_id):
+    for model in cluster.models:
+        if model.pk == model_id:
+            return model
 
 @sync_to_async
 def recreate_group(group):
@@ -207,6 +218,41 @@ def custom_profit_loss_percent_change(y_true, y_pred):
     
     return total_loss
 
+class DtwLoss(tf.keras.losses.Loss):
+    def __init__(self, batch_size: int = 32):
+        super(DtwLoss, self).__init__()
+        self.batch_size = batch_size
+
+    def call(self, y_true, y_pred):
+        tmp = []
+        for item in range(self.batch_size):
+            tf.print(f'Working on batch: {item}\n')
+            s = y_true[item, :]
+            t = y_pred[item, :]
+            n, m = len(s), len(t)
+            dtw_matrix = []
+            for i in range(n + 1):
+                line = []
+                for j in range(m + 1):
+                    if i == 0 and j == 0:
+                        line.append(0)
+                    else:
+                        line.append(np.inf)
+                dtw_matrix.append(line)
+
+            for i in range(1, n + 1):
+                for j in range(1, m + 1):
+                    cost = tf.abs(s[i - 1] - t[j - 1])
+                    last_min = tf.reduce_min([dtw_matrix[i - 1][j], dtw_matrix[i][j - 1], dtw_matrix[i - 1][j - 1]])
+                    dtw_matrix[i][j] = tf.cast(cost, dtype=tf.float32) + tf.cast(last_min, dtype=tf.float32)
+
+            temp = []
+            for i in range(len(dtw_matrix)):
+                temp.append(tf.stack(dtw_matrix[i]))
+
+            tmp.append(tf.stack(temp)[n, m])
+        return tf.reduce_mean(tmp)
+
 
 def attention_mechanism(encoder_outputs, decoder_state):
     # Assuming encoder_outputs is [batch_size, input_steps, features]
@@ -225,17 +271,18 @@ def no_training_output(tensor):
 def create_attention_model(input_steps, output_steps, features):
     # Encoder
 
-    encoder_inputs = Input(shape=(input_steps, features))
+    encoder_inputs = Input(shape=(input_steps, features), name='input')
 
     encoder_lstm1 = LSTM(
-        20,
+        200,
         return_sequences=True,
-        kernel_regularizer=L2(0.01),
-        recurrent_regularizer=L2(0.01),
+        kernel_regularizer=L2(0.00),
+        recurrent_regularizer=L2(0.001),
+        name="encoder_lstm_1_freeze",
     )
     encoder_output1 = encoder_lstm1(encoder_inputs)
 
-    encoder_lstm_final = LSTM(20, return_state=True, return_sequences=True)
+    encoder_lstm_final = LSTM(100, return_state=True, return_sequences=True, name="encoder_lstm_final_freeze")
     encoder_outputs, state_h, state_c = encoder_lstm_final(encoder_output1)
 
     # Decoder
@@ -243,7 +290,7 @@ def create_attention_model(input_steps, output_steps, features):
         state_h
     )  # Prepare decoder inputs
 
-    decoder_lstm = LSTM(20, return_sequences=True)
+    decoder_lstm = LSTM(100, return_sequences=True)
     decoder_output1 = decoder_lstm(
         decoder_initial_input, initial_state=[state_h, state_c]
     )
@@ -263,7 +310,7 @@ def create_attention_model(input_steps, output_steps, features):
     # Concatenate context vectors with decoder outputs
     decoder_combined_context1 = Concatenate(axis=-1)([context_vectors, decoder_output1])
 
-    decoder_lstm2 = LSTM(10, return_sequences=True)
+    decoder_lstm2 = LSTM(200, return_sequences=True)
     decoder_output2 = decoder_lstm2(decoder_combined_context1)
 
     # Manually apply attention mechanism for each timestep
@@ -354,7 +401,6 @@ def save_decoder_initial_weights(model):
     for layer in model.layers:
         if "input" in layer.name:
             continue
-        print(layer.name)
         initial_weights[layer.name] = deepcopy(layer.get_weights())
     return initial_weights
 
@@ -371,6 +417,7 @@ def train_model(
     lr=0.001,
     early_stopping_patience=20,
     loss="mae",
+    shuffle = False 
 ):
     X_train, y_train, X_test, y_test = deepcopy(data)
     X_train = filter_by_features(X_train, features, X_feature_dict)
@@ -392,19 +439,24 @@ def train_model(
         epochs=epochs,
         batch_size=batch_size,
         callbacks=[tensorboard_callback,early_stopping],
-        shuffle = False
+        shuffle = shuffle
 
     )
     return model
 
 import pandas as pd 
 import numpy as np
-def eval_model(X_test, y_test_old, model, num_days=6):
+def eval_model(X_test, y_test_old, model, num_days=6, test_model = True):
 
     model_output = model.predict(X_test)
     print(type(model_output), len(model_output))
-    predicted_y_old = model_output[0]
-    attention_weights = model_output[1]
+
+    if test_model:
+        predicted_y_old = model_output[0]
+        attention_weights = model_output[1]
+    else:
+        predicted_y_old = model_output
+        attention_weights = None
     
     predicted_y_old = np.squeeze(predicted_y_old, axis=-1)
 
@@ -450,7 +502,6 @@ def eval_model(X_test, y_test_old, model, num_days=6):
     return output_string, results, predicted_y_old, attention_weights
 
 
-import plotly.graph_objects as go
 def visualize_future_distribution(results):
     '''
     Create stacked box and whisker plots for the predicted and real values

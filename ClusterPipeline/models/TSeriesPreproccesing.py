@@ -139,33 +139,14 @@ class StockDataSet(DataSet):
         if len(self.test_df) < 1:
             raise ValueError("test_set is None")
 
-        quant_min_max_feature_sets = [
-            feature_set
-            for feature_set in self.X_feature_sets
-            if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value
-            or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
-        ]
-        quant_min_max_feature_sets += [
-            feature_set
-            for feature_set in self.y_feature_sets
-            if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value
-            or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
-        ]
+        self.scale_features()
 
-        print("Scaling Quant Min Max Features")
-        if len(quant_min_max_feature_sets) > 0:
-            self.training_df, self.test_df = self.scale_quant_min_max(
-                quant_min_max_feature_sets, self.training_df, self.test_df
-            )
-        print("Quant Min Max Features Scaled")
-
-        standard_feature_sets = [
-            feature_set
-            for feature_set in self.X_feature_sets
-            if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
-        ]
-        if len(standard_feature_sets) > 0:
-            self.scale_standard(standard_feature_sets, self.training_df, self.test_df)
+        # check for infinite values
+        if self.training_df.isin([np.inf, -np.inf]).any().any():
+           # print the columns with infinite values
+            columns_with_inf = self.training_df.columns[self.training_df.isin([np.inf, -np.inf]).any()].tolist()
+            print("Columns with infinite values:", columns_with_inf)
+            raise ValueError("Training set has infinite values")
 
         if to_train:
             # print("Running RandomForest Regressor to find strong predictors")
@@ -314,6 +295,40 @@ class StockDataSet(DataSet):
             )
             # test_df = test_df.iloc[self.n_steps:,:] # Remove the first n_steps rows to prevent data leakage
             # TODO mininmal data leakage needs to be addressed, when refactored, this class does not know the steps
+    
+    def scale_features(self): 
+        """
+        Scales all of the features based on the specified scaling dict and scaling method 
+        """
+
+        quant_min_max_feature_sets = [
+            feature_set
+            for feature_set in self.X_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value
+            or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
+        ]
+        quant_min_max_feature_sets += [
+            feature_set
+            for feature_set in self.y_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX.value
+            or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
+        ]
+
+        standard_feature_sets = [
+            feature_set
+            for feature_set in self.X_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
+        ]
+        if len(standard_feature_sets) > 0:
+            self.training_df, self.test_df = self.scale_standard(standard_feature_sets, self.training_df, self.test_df)
+
+        print("Scaling Quant Min Max Features")
+        if len(quant_min_max_feature_sets) > 0:
+            self.training_df, self.test_df = self.scale_quant_min_max(
+                quant_min_max_feature_sets, self.training_df, self.test_df
+            )
+        print("Quant Min Max Features Scaled")
+        
 
     def scale_quant_min_max(self, feature_sets, training_df, test_df):
         """
@@ -353,7 +368,6 @@ class StockDataSet(DataSet):
         test_df = test_df.copy()
 
         for feature_set in feature_sets:
-            print(f"Name: {feature_set.name} len {len(feature_set.cols)}")
             scaler = StandardScaler()
             scaler.fit(training_df[feature_set.cols])
 
@@ -365,6 +379,8 @@ class StockDataSet(DataSet):
             test_df[feature_set.cols] = scaler.transform(test_df[feature_set.cols])
 
             feature_set.scaler = scaler
+        
+        return training_df, test_df
 
     def scale_transform(self, df, feature_sets):
         """
@@ -396,7 +412,7 @@ class StockDataSet(DataSet):
         y_feature_sets += feature_sets
         
 
-        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -15, end_lag = -1, ticker = self.ticker)
+        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -25, end_lag = -1, ticker = self.ticker)
         y_feature_sets += feature_sets
 
         self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 14, ticker = self.ticker)
@@ -418,7 +434,6 @@ class StockDataSet(DataSet):
                 df[col] = pd.to_numeric(df[col], downcast="float")
             if df[col].dtype == "int64":
                 df[col] = pd.to_numeric(df[col], downcast="integer")
-        print(df.dtypes)
         return df
 
 
@@ -695,14 +710,12 @@ def create_momentum_vars(df, factory, scaling_method = ScalingMethod.STANDARD):
 
     stoch_df = momentum_factory.createStoch()
 
-    print(f"first date stoch: {stoch_df.index[0]}")
-    print(f"last date stoch: {stoch_df.index[-1]}")
-    print(f"first date df: {df.index[0]}")
-    print(f"last date df: {df.index[-1]}")
     df = pd.concat([df, stoch_df], axis=1)
     momentum_cols += stoch_df.columns.tolist()
 
     feature_set.cols += momentum_cols
+
+    print("Momentum Features Created")
 
     return df, feature_set
 

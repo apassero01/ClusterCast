@@ -6,9 +6,6 @@ import pandas_ta as ta
 import ta as technical_analysis
 
 
-
-
-
 class IndicatorFactory:
     '''
     Abstract class for a factory that creates features for specific indicator(s)
@@ -32,8 +29,8 @@ class OHLCVFactory(IndicatorFactory):
         for col in self.df.columns:
             new_col = 'pctChg' + col
             self.ohlcPctChg_df[new_col] = self.df[col].pct_change() * 100 
-            self.ohlcPctChg_df[new_col] = self.ohlcPctChg_df[new_col].fillna(method='bfill')
-        
+            self.ohlcPctChg_df[new_col] = self.ohlcPctChg_df[new_col].replace([np.inf, -np.inf], np.nan)
+            self.ohlcPctChg_df[new_col] = self.ohlcPctChg_df[new_col].fillna(method='bfill')        
         return self.ohlcPctChg_df
 
     def createIntraDay(self):
@@ -282,12 +279,10 @@ class MomentumFactory(IndicatorFactory):
         return self.rsi_df
 
     def createMACD(self):
-        print(self.macd_df.head(1))
         new_macd_df = self.df.ta.macd(fast=12, slow=26, append = False)
         self.macd_df = pd.concat([self.macd_df, new_macd_df], axis=1)
         self.macd_df.columns = ["macd", "macd_signal", "macd_diff"]
         self.macd_df = self.macd_df.fillna(method='bfill')
-        print(self.macd_df.head(1))
         return self.macd_df
 
     def createStoch(self):
@@ -296,7 +291,6 @@ class MomentumFactory(IndicatorFactory):
         self.stoch_df = pd.concat([self.stoch_df, new_stoch_df], axis=1)
         self.stoch_df.columns = ["stoch_k", "stoch_d"]
         self.stoch_df = self.stoch_df.fillna(method='bfill')
-        print(self.stoch_df.head(1))
         return self.stoch_df
 
 

@@ -593,42 +593,16 @@ class StockClusterGroup(ClusterGroup):
         """
         model_features = self.group_params.training_features
         cluster.group_params = self.group_params
-        cluster.train_rnn(model_features, None, 5, sample_size=20)
+        cluster.train_rnn(model_features, None, 20, sample_size=20)
         cluster.save()
         cluster.hard_filter_models(accuracy_threshold=30, epoch_threshold=1)
 
         self.group_params.save()
 
-    def train_general_model(self, model_features):
-        """
-        Method for training a general model on the entire data set. This model will be used for fine tuning on the individual clusters.
-        """
-        X_train = self.filter_by_features(
-            self.X_train, model_features, self.X_feature_dict
-        )
-        X_test = self.filter_by_features(
-            self.X_test, model_features, self.X_feature_dict
-        )
-        y_train = self.y_train
-        y_test = self.y_test
-
-        self.general_model = create_model(len(model_features))
-
-        self.general_model.fit(
-            X_train,
-            y_train,
-            epochs=50,
-            batch_size=16,
-            validation_data=(X_test, y_test),
-            verbose=1,
-        )
-        clear_session()
-
     def filter_by_features(self, seq, feature_list, X_feature_dict):
         """
         Method to filter a 3d array of sequences by a list of features.
         """
-        seq = seq.copy()
         indices = [X_feature_dict[x] for x in feature_list]
         # Using numpy's advanced indexing to select the required features
         return seq[:, :, indices]
@@ -637,7 +611,6 @@ class StockClusterGroup(ClusterGroup):
         '''
         Method to filter a 3d array of sequences by a list of features.
         '''
-        seq = seq.copy()
         indices = [y_feature_dict[x] for x in feature_list]
         # Using numpy's advanced indexing to select the required features
         return seq[:, indices]
@@ -1075,7 +1048,7 @@ class StockCluster(Cluster):
                         raise ValueError("Invalid Layer Type")
 
                 model.buildModel()
-                model.fit(epochs=100, batch_size=7)
+                model.fit(epochs=100, batch_size=20)
                 model.evaluate_test()
                 model.compute_average_accuracy()
                 model.serialize()
@@ -1083,7 +1056,6 @@ class StockCluster(Cluster):
                 num_models += 1
                 self.models.append(model)
                 clear_session()
-                del model.model
 
     def get_best_model(self):
         """
@@ -1111,20 +1083,6 @@ class StockCluster(Cluster):
         for model in self.models:
             accuracy = model.model_metrics["avg_accuracy"]
             epochs = model.model_metrics["effective_epochs"]
-
-            # write to output.txt
-            with open("output.txt", "w") as f:
-                f.write(
-                    "Cluster "
-                    + str(self.label)
-                    + " Model "
-                    + str(model.id)
-                    + " Accuracy: "
-                    + str(accuracy)
-                    + " Epochs: "
-                    + str(epochs)
-                    + "\n"
-                )
 
             print(
                 "Cluster "
@@ -1179,10 +1137,11 @@ class StockCluster(Cluster):
             
 
         if 'rsi' in features:
-            training_features += ["rsi", "macd", "macd_signal", "macd_diff", "stoch_k", "stoch_d"]
-            num_other_predictors = num_features - len(training_features)
-
-        print((num_other_predictors))
+            #todo currently hardcoding momentum indicators to make sure they are sampled in larger feature set 
+            num_momentum_indicators = 3 
+            momentum_indicators = ["rsi", "macd", "macd_signal", "macd_diff", "stoch_k", "stoch_d"]
+            training_features += list(np.random.choice(momentum_indicators, num_momentum_indicators, replace=False))
+            num_other_predictors -= num_momentum_indicators
 
         other_predictors = np.random.choice(
             [x for x in features if x not in training_features],

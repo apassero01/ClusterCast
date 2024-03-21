@@ -165,6 +165,7 @@ class StockPrediction(Prediction):
         future_sequence_elements = [
             future_sequence_elements[0]
         ]  # Dont think we need to go through them all as that has been doing on previous days
+        print(future_sequence_elements[0].end_date)
 
         # find the matching clusters
         model_dict = defaultdict(list)
@@ -226,7 +227,13 @@ class StockPrediction(Prediction):
 
             model.deserialize_model()
 
-            predictions = model.predict(input_data)
+            model_output = model.predict(input_data)
+            if type(model_output) == list:
+                predictions = model_output[0]
+                attention_weights = model_output[1]
+            else:
+                predictions = model_output
+        
             predictions = predictions.squeeze(axis=2)
 
             for i in range(len(seq_elements)):
@@ -237,21 +244,26 @@ class StockPrediction(Prediction):
                 )[1:].tolist()
 
                 cur_prediction_transformed = np.zeros_like(cur_prediction)
+
+                num_future_steps = 0
                 for i,feature in enumerate(cluster_group.group_params.target_cols):
                     scaler = [feature_set for feature_set in cluster_group.group_params.y_feature_sets if feature_set.name == feature][0].scaler
                     cur_prediction_transformed[i] = scaler.inverse_transform(cur_prediction[i].reshape(-1,1)).squeeze()
+                    if '+' in feature:
+                        num_future_steps +=1
 
 
                 end_day_close = self.generic_dataset.test_df.loc[end_date]["close"]
                 print("PRESCALED PREDICTION")
-                print(cur_prediction)
+                print(print(len(cur_prediction)))
 
-
+                # extract number of future_steps
                 if model.target_feature_type == "lag":
-                    if len(cur_prediction == 15):
-                        cur_prediction_transformed = list(accumulate(cur_prediction_transformed[-15:]))
+                    if len(cur_prediction_transformed) > num_future_steps:
+                        cur_prediction_transformed = list(accumulate(cur_prediction_transformed[-num_future_steps:]))
                     else:
-                        cur_prediction_transformed = list(accumulate(cur_prediction_transformed[-6:]))
+                        cur_prediction_transformed = list(accumulate(cur_prediction_transformed))
+                print(len(cur_prediction_transformed))
 
                 price_predictions = []
                 daily_accuracy = []
@@ -361,8 +373,14 @@ class StockPrediction(Prediction):
             or feature_set.scaling_method.value == ScalingMethod.QUANT_MINMAX_G.value
         ]
 
+        standard_feature_sets = [
+            feature_set
+            for feature_set in X_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
+        ]
+
         mirrored_dataset.test_df = mirrored_dataset.scale_transform(
-            mirrored_dataset.test_df, quant_min_max_feature_sets
+            mirrored_dataset.test_df, quant_min_max_feature_sets + standard_feature_sets
         )
 
         sequence_set = StockSequenceSet(mirrored_dataset.group_params)
@@ -438,26 +456,6 @@ class StockPrediction(Prediction):
                 smallest_cluster = cluster
 
         return [smallest_cluster], cluster_seq_x
-
-        ## Go back and possibly implemenet distance based matching alg
-        # matching_clusters = []
-        # for cluster in cluster_group.clusters:
-        #     cluster_metrics = cluster.cluster_metrics
-        #     centroid = cluster.centroid
-        #     std = cluster_metrics['std_dev']
-        #     iqr = cluster_metrics['iqr']
-
-        #     distance = self.compute_distance(cluster_seq_x, centroid)
-
-        #     threshold = std * (1 + length_factor * future_sequence_element.seq_x_scaled.shape[0])
-
-        #     print("Distance: {}".format(distance))
-        #     print("Threshold: {}".format(threshold))
-
-        #     if distance < threshold:
-        #         matching_clusters.append(cluster)
-
-        return matching_clusters
 
     def compute_distance(self, future_sequence, centroid, metric="euclidean"):
         """

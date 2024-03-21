@@ -1,6 +1,6 @@
 from keras.layers import RepeatVector, TimeDistributed
 from tensorflow.keras.models import Sequential, clone_model, Model
-from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization,Input,Masking,Flatten,Permute,RepeatVector,Multiply,Activation
+from tensorflow.keras.layers import Dense, LSTM, Dropout, GRU,BatchNormalization,Input,Masking,Flatten,Permute,RepeatVector,Multiply,Activation,Concatenate
 from tensorflow.keras.regularizers import L1, L2, L1L2
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.backend import clear_session
@@ -10,6 +10,10 @@ import os
 from django.db import models
 import pandas as pd
 import numpy as np
+from keras.layers import Layer, Lambda
+from keras.layers import Activation, Flatten
+from tensorflow.keras.regularizers import L1, L2, L1L2
+import keras.backend as K
 import plotly.graph_objects as go
 import tensorflow as tf
 import json
@@ -229,7 +233,7 @@ class RNNModel(models.Model):
 
             new_model.add(TimeDistributed(Dense(1), name="time_distributed_output"))
 
-        new_model.compile(loss="mse", optimizer=Adam(learning_rate=0.0001))
+        new_model.compile(loss="mse", optimizer=Adam(learning_rate=0.0005))
         self.model = new_model
 
     def fit(self, epochs=100, batch_size=5):
@@ -237,7 +241,9 @@ class RNNModel(models.Model):
 
         summary_string_list = []
 
-        self.model = create_modelAE(self.input_shape[2])
+        self.model, self.test_model = create_attention_model(
+            input_steps=self.input_shape[1], output_steps=self.output_shape, features=self.input_shape[2]
+        )
 
         # self.model.summary(print_fn=lambda x: summary_string_list.append(x))
         # self.summary_string = "\n".join(summary_string_list).replace('"', '\\"')
@@ -296,8 +302,8 @@ class RNNModel(models.Model):
         predicted_y = np.squeeze(predicted_y, axis=-1)
 
         if self.target_feature_type == 'lag':
-            predicted_y = predicted_y[:,-15:]
-            self.y_test = self.y_test[:,-15:]
+            predicted_y = predicted_y[:,-25:]
+            self.y_test = self.y_test[:,-25:]
 
             predicted_y = np.cumsum(predicted_y,axis=1)
             self.y_test = np.cumsum(self.y_test,axis=1)
@@ -351,7 +357,9 @@ class RNNModel(models.Model):
             os.makedirs(self.model_dir)
 
         # Save the model
-        self.model.save(self.model_dir + "model.h5")
+        self.test_model.save(self.model_dir + "model.h5")
+        del self.model # Delete the model to save memory
+        del self.test_model
 
     def deserialize_model(self):
         """
@@ -545,6 +553,101 @@ def create_modelAE(input_shape, latent_dim=6):
     model_lstm.compile(optimizer=optimizer, loss="mae")
 
     return model_lstm
+
+
+def attention_mechanism(encoder_outputs, decoder_state):
+    # Assuming encoder_outputs is [batch_size, input_steps, features]
+    # and decoder_state is [batch_size, features]
+    score = Dense(encoder_outputs.shape[2])(decoder_state)  # Project decoder state
+    score = tf.expand_dims(score, 1)  # Expand dims to add input_steps axis
+    score = score + encoder_outputs  # Add to encoder outputs
+    attention_weights = Activation("softmax")(score)  # Compute attention weights
+    context_vector = tf.reduce_sum(attention_weights * encoder_outputs, axis=1)
+    return context_vector, attention_weights
+
+def no_training_output(tensor):
+    return K.stop_gradient(tensor)  # This halts gradients for the tensor
+
+
+def create_attention_model(input_steps, output_steps, features):
+    # Encoder
+
+    encoder_inputs = Input(shape=(input_steps, features), name='input')
+
+    encoder_lstm1 = LSTM(
+        200,
+        return_sequences=True,
+        kernel_regularizer=L2(0.00),
+        recurrent_regularizer=L2(0.001),
+        name="encoder_lstm_1_freeze",
+    )
+    encoder_output1 = encoder_lstm1(encoder_inputs)
+
+    encoder_lstm_final = LSTM(100, return_state=True, return_sequences=True, name="encoder_lstm_final_freeze")
+    encoder_outputs, state_h, state_c = encoder_lstm_final(encoder_output1)
+
+    # Decoder
+    decoder_initial_input = RepeatVector(output_steps)(
+        state_h
+    )  # Prepare decoder inputs
+
+    decoder_lstm = LSTM(100, return_sequences=True)
+    decoder_output1 = decoder_lstm(
+        decoder_initial_input, initial_state=[state_h, state_c]
+    )
+
+    # Manually apply attention mechanism for each timestep
+    context_vectors_list1 = []
+    for t in range(output_steps):
+        # Apply attention mechanism
+        context_vector_t1, attention_weights_t1 = attention_mechanism(
+            encoder_outputs, decoder_output1[:, t, :]
+        )
+        context_vectors_list1.append(context_vector_t1)
+
+    # Concatenate the list of context vectors
+    context_vectors = tf.stack(context_vectors_list1, axis=1)
+
+    # Concatenate context vectors with decoder outputs
+    decoder_combined_context1 = Concatenate(axis=-1)([context_vectors, decoder_output1])
+
+    decoder_lstm2 = LSTM(200, return_sequences=True)
+    decoder_output2 = decoder_lstm2(decoder_combined_context1)
+
+    # Manually apply attention mechanism for each timestep
+    context_vectors_list2 = []
+    attention_weights_list2 = []
+    for t in range(output_steps):
+        # Apply attention mechanism
+        context_vector_t2, attention_weights_t2 = attention_mechanism(
+            encoder_outputs, decoder_output2[:, t, :]
+        )
+        context_vectors_list2.append(context_vector_t2)
+        attention_weights_list2.append(attention_weights_t2)
+
+
+    # Concatenate the list of context vectors
+    context_vectors2 = tf.stack(context_vectors_list2, axis=1)
+    decoder_combined_context2 = Concatenate(axis=-1)(
+        [context_vectors2, decoder_output2]
+    )
+    attention_weights = tf.stack(attention_weights_list2, axis=1)
+
+    attention_weights_output = Lambda(lambda x: K.stop_gradient(x))(attention_weights)
+
+    # Output layer for reconstruction
+    # output = TimeDistributed(Dense(1))(decoder_combined_context2)
+
+    main_output = TimeDistributed(Dense(1))(decoder_combined_context2)
+
+    # Create and compile the model
+    training_model = Model(inputs=encoder_inputs, outputs=main_output)
+    training_model.compile(optimizer="adam", loss="mse")  # Use appropriate loss
+
+    test_model = Model(inputs=encoder_inputs, outputs=[main_output, attention_weights_output])
+    test_model.compile(optimizer="adam", loss="mse")  # Use appropriate loss
+
+    return training_model, test_model
 
 class StepResult(models.Model):
     steps_in_future = models.IntegerField(default=0)

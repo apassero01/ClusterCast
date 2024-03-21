@@ -456,9 +456,9 @@
         };
 
         const iq3Trace = {
-            x: allDatesTrimmed,
-            y: iq3PredictionsAligned,
-            fill: 'tonexty',
+           x: allDatesTrimmed,
+           y: iq3PredictionsAligned,
+           // fill: 'tonexty',
             mode: 'lines',
             line: { color: 'lightgreen' },
             name: 'Predictions IQR'
@@ -495,7 +495,7 @@
             annotations: annotations  // Assuming annotations are already defined
         };
 
-        const data = [closingPricesTrace, predictionDatesTrace, iq1Trace, iq3Trace]; // Add more traces as needed
+        const data = [closingPricesTrace, predictionDatesTrace]; // Add more traces as needed
 
         if (document.querySelector('.active-prediction-button')) {
             const date = document.querySelector('.active-prediction-button').textContent;

@@ -61,7 +61,7 @@ def cluster_run(request):
         target_features = [] 
         # target_features += ['pctChgclose{}_target'.format(i) for i in range(-14, 0) ]
         # target_features += ['pctChgclose-0_target']
-        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 16) ]
+        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 26) ]
 
 
         scaling_dict = {
