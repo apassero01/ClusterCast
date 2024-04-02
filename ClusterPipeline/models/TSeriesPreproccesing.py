@@ -243,7 +243,7 @@ class StockDataSet(DataSet):
         X_cols.update(feature_set.cols)
 
         # Create momentum features
-        self.df, feature_set = create_momentum_vars(self.df, self.factories, scaling_method=self.scaling_dict["momentum_vars"])
+        self.df, feature_set = create_momentum_vars(self.df, self.factories, scaling_method=self.scaling_dict["momentum_vars"], ticker = self.ticker)
         self.X_feature_sets.append(feature_set)
         X_cols.update(feature_set.cols)
 
@@ -689,13 +689,13 @@ def create_pctChg_vars(
     
     return df, feature_set
 
-def create_momentum_vars(df, factory, scaling_method = ScalingMethod.STANDARD):
+def create_momentum_vars(df, factory, scaling_method = ScalingMethod.STANDARD, ticker = None):
     """
     Create momentum variables
     """
 
     df = df.copy()
-    feature_set = FeatureSet(scaling_method, "momentum_vars")
+    feature_set = FeatureSet(scaling_method, "momentum_vars", ticker = ticker)
 
     momentum_factory = factory['momentum_factory']
     momentum_cols = []

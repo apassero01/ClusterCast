@@ -295,6 +295,8 @@ class StockClusterGroupParams(ClusterGroupParams):
             + str(self.interval)
             + "-"
             + str(self.cluster_features)
+            + "-"
+            + str(self.pk)
         )
 
     def create_model_dir(self):
@@ -434,7 +436,7 @@ class StockClusterGroup(ClusterGroup):
 
         if alg == "TSKM":
             # n_clusters = self.determine_n_clusters(X_train_cluster,metric)
-            n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 5
+            n_clusters = math.ceil(math.sqrt(len(X_train_cluster))) // 7
             # n_clusters = 1
             self.cluster_alg = TimeSeriesKMeans(
                 n_clusters=n_clusters, metric=metric, random_state=3
@@ -574,16 +576,15 @@ class StockClusterGroup(ClusterGroup):
         fine_tune: Boolean to indicate whether we are training a base model and fine tunining it on the individual clusters.
         """
 
-        self.filtered_clusters = []
-
         for cluster in self.clusters:
             cluster.train_rnn(
                 model_features, model, self.group_params.feature_sample_num, self.group_params.feature_sample_size
             )
-            self.filtered_clusters.append(cluster)
             cluster.save()
             # Maybe delete the models later
             cluster.hard_filter_models()
+            del cluster
+            gc.collect()
 
         self.group_params.save()
 

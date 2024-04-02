@@ -61,12 +61,12 @@ def cluster_run(request):
         target_features = [] 
         # target_features += ['pctChgclose{}_target'.format(i) for i in range(-14, 0) ]
         # target_features += ['pctChgclose-0_target']
-        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 26) ]
+        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 3) ]
 
 
         scaling_dict = {
-            "price_vars": SP.ScalingMethod.UNSCALED,
-            "trend_vars": SP.ScalingMethod.UNSCALED,
+            "price_vars": SP.ScalingMethod.SBSG,
+            "trend_vars": SP.ScalingMethod.SBSG,
             "pctChg_vars": SP.ScalingMethod.STANDARD,
             "rolling_vars": SP.ScalingMethod.STANDARD,
             "target_vars": SP.ScalingMethod.QUANT_MINMAX,
@@ -360,7 +360,7 @@ def forcast(request):
                     end_date=prediction_end_date,
                     total_model_accuracy_thresh=50,
                     individual_model_accuracy_thresh=50,
-                    epochs_threshold=10,
+                    epochs_threshold=5,
                 )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk
@@ -389,7 +389,7 @@ def forcast(request):
                 end_date=prediction_end_date,
                 total_model_accuracy_thresh=50,
                 individual_model_accuracy_thresh=50,
-                epochs_threshold=10,
+                epochs_threshold=5,
             )
             forcast_timeline.save()
             forcast_id = forcast_timeline.pk

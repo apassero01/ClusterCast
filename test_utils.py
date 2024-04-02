@@ -501,6 +501,44 @@ def eval_model(X_test, y_test_old, model, num_days=6, test_model = True):
 
     return output_string, results, predicted_y_old, attention_weights
 
+def eval_pred(y_test, y_pred, num_days=6):
+
+    predicted_y_old = np.squeeze(y_pred, axis=-1)
+    
+    y_pred = np.cumsum(predicted_y_old, axis=1)
+    y_test = np.cumsum(y_test, axis=1)
+    # predicted_y = predicted_y_old
+    # y_test = y_test_old
+   
+
+    num_days = y_pred.shape[1]  # Assuming this is the number of days
+    print(num_days)
+    results = pd.DataFrame(y_pred, columns=[f'predicted_{i+1}' for i in range(num_days)])
+
+    for i in range(num_days):
+        results[f'real_{i+1}'] = y_test[:, i]
+
+    # Generate output string with accuracies
+    output_string = f"Cluster Number:\n"
+    for i in range(num_days):
+        tolerance = 0.05  # Set your tolerance level
+
+        # Modify the condition for 'same_day'
+        results['same_day'] = ((results[f'predicted_{i+1}'] > 0) & (results[f'real_{i+1}'] > 0)) | \
+                    ((results[f'predicted_{i+1}'] < 0) & (results[f'real_{i+1}'] < 0)) | \
+                    (np.abs(results[f'predicted_{i+1}'] - results[f'real_{i+1}']) < tolerance)
+        accuracy = round(results['same_day'].mean() * 100,2)
+
+        output_string += (
+            f"Accuracy{i+1}D {accuracy}% "
+            f"PredictedRet: {results[f'predicted_{i+1}'].mean()} "
+            f"ActRet: {results[f'real_{i+1}'].mean()}\n"
+        )
+    
+    output_string += f"Train set length:  Test set length: {len(y_test)}\n"
+
+    return output_string, results
+
 
 def visualize_future_distribution(results):
     '''
@@ -607,3 +645,26 @@ def plot_attention_weights(attention_weights):
     plt.show()
 
     return fig
+
+def plot_attention_weights_single(attention_weights):
+    # Assuming attention_weights is a numpy array or a list that can be converted.
+    # Extracting a single set of attention weights for visualization if it's in a batch.
+    attention_weights_single = attention_weights[0] if len(attention_weights.shape) > 2 else attention_weights
+    
+    plt.figure(figsize=(10, 8))
+    
+    # Using Seaborn to create the heatmap
+    ax = sns.heatmap(attention_weights_single, cmap='viridis', linewidths=0.5, cbar=True)
+    
+    ax.set_title('Attention Weights Heatmap')
+    ax.set_ylabel('Output Sequence Position')
+    ax.set_xlabel('Input Sequence Position')
+
+    # Optionally, add ticks if you want to show position indices
+    ax.set_xticks(range(len(attention_weights_single[0])))
+    ax.set_xticklabels(range(1, len(attention_weights_single[0])+1), rotation=45)
+    
+    ax.set_yticks(range(len(attention_weights_single)))
+    ax.set_yticklabels(range(1, len(attention_weights_single)+1))
+    
+    plt.show()
