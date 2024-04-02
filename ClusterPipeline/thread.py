@@ -10,6 +10,12 @@ class CreateGroupBackground(threading.Thread):
         self.group_params.initialize()
         threading.Thread.__init__(self)
 
+        self.training_dict = {
+            'target_feature_type': 'lag',
+            'max_num_days': 25,
+            'random_sample_fut_length' : True,
+        }
+
     def run(self):
         try: 
             print("Background thread started")
@@ -24,7 +30,7 @@ class CreateGroupBackground(threading.Thread):
 
     def create_new_group(self):
         cluster_group = StockClusterGroup.objects.create(group_params = self.group_params)
-        cluster_group.generate_new_group()
+        cluster_group.generate_new_group(self.training_dict)
 
 
 

@@ -45,6 +45,7 @@ class RNNModel(models.Model):
     num_encoder_layers = models.IntegerField(default=0)
     model_metrics = models.JSONField(default=dict)
     target_feature_type = models.CharField(max_length=1000,default = 'cumulative')
+    target_features = models.JSONField(default=list, blank=True)
 
     def initialize(
         self,

@@ -246,7 +246,7 @@ class StockPrediction(Prediction):
                 cur_prediction_transformed = np.zeros_like(cur_prediction)
 
                 num_future_steps = 0
-                for i,feature in enumerate(cluster_group.group_params.target_cols):
+                for i,feature in enumerate(model.target_features):
                     scaler = [feature_set for feature_set in cluster_group.group_params.y_feature_sets if feature_set.name == feature][0].scaler
                     cur_prediction_transformed[i] = scaler.inverse_transform(cur_prediction[i].reshape(-1,1)).squeeze()
                     if '+' in feature:

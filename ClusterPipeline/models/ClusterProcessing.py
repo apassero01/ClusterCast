@@ -38,7 +38,7 @@ from tensorflow.keras.initializers import glorot_uniform, zeros
 from django.dispatch import receiver
 import shutil
 import gc
-
+import random
 
 class SupportedParams(models.Model):
     """
@@ -566,7 +566,7 @@ class StockClusterGroup(ClusterGroup):
         self.clusters.append(cluster)
 
 
-    def train_all_rnns(self, model_features, fine_tune=False, model = None):
+    def train_all_rnns(self, model_features, training_dict, fine_tune=False, model = None):
         """
         Method to train an RNN for each cluster. The functionality for training an RNN is encapsulated in the train_rnn method of the StockCluster class.
         This method iterates over the clusters and trains the model.
@@ -578,7 +578,8 @@ class StockClusterGroup(ClusterGroup):
 
         for cluster in self.clusters:
             cluster.train_rnn(
-                model_features, model, self.group_params.feature_sample_num, self.group_params.feature_sample_size
+                model_features, model, self.group_params.feature_sample_num, self.group_params.feature_sample_size,
+                training_dict, 
             )
             cluster.save()
             # Maybe delete the models later
@@ -588,13 +589,13 @@ class StockClusterGroup(ClusterGroup):
 
         self.group_params.save()
 
-    def train_single_cluster(self, cluster):
+    def train_single_cluster(self, cluster, training_dict):
         """
         Method to train an RNN for a single cluster. This method is used for fine tuning on the individual clusters.
         """
         model_features = self.group_params.training_features
         cluster.group_params = self.group_params
-        cluster.train_rnn(model_features, None, 20, sample_size=20)
+        cluster.train_rnn(model_features, self.group_params.target_cols, training_dict = training_dict, num_feauture_iterations = 2, sample_size=20 )
         cluster.save()
         cluster.hard_filter_models(accuracy_threshold=30, epoch_threshold=1)
 
@@ -634,7 +635,7 @@ class StockClusterGroup(ClusterGroup):
         """
         self.clusters = StockCluster.objects.filter(cluster_group=self)
 
-    def generate_new_group(self):
+    def generate_new_group(self, training_dict):
         """
         Method to generate a new group. This method is used when the user wants to run the pipeline from scratch
         """
@@ -643,7 +644,7 @@ class StockClusterGroup(ClusterGroup):
         self.create_sequence_set()
         self.run_clustering()
         self.create_clusters()
-        self.train_all_rnns(model_features=model_features)
+        self.train_all_rnns(model_features=model_features, training_dict=training_dict)
 
         self.save()
 
@@ -942,20 +943,18 @@ class StockCluster(Cluster):
     def train_rnn(
         self,
         model_features,
+        target_cols,
+        training_dict,
         general_model=None,
         num_feauture_iterations=30,
         sample_size=5,
-    ):
+        ):
         if len(self.X_train) == 0 or len(self.X_test) == 0:
             return
 
         model_params = self.cluster_group.group_params.model_params
         
         model_params = self.cluster_group.group_params.model_params 
-
-        target_features = self.cluster_group.group_params.target_cols
-        y_train_filtered = self.cluster_group.filter_y_by_features(self.y_train, target_features, self.y_feature_dict)
-        y_test_filtered = self.cluster_group.filter_y_by_features(self.y_test, target_features, self.y_feature_dict)
 
         num_models = 0
         self.models = []
@@ -964,6 +963,28 @@ class StockCluster(Cluster):
             self.cluster_group.group_params.strong_predictors = []
 
         for i in range(num_feauture_iterations):
+
+            target_feature_type = training_dict['target_feature_type']
+            max_num_days = training_dict['max_num_days']
+            
+            if training_dict['random_sample_fut_length']:
+                days_to_predict = random.randint(1, max_num_days)
+            else:
+                days_to_predict = max_num_days
+
+            if target_feature_type == 'lag':
+                target_features = ['pctChgclose+{}_target'.format(i) for i in range(1, days_to_predict + 1) ]
+            else: 
+                target_features = ['sumpctChgclose_{}'.format(i) for i in range(1, days_to_predict + 1) ]
+            
+            for feature in target_features: 
+                if feature not in target_cols: 
+                    raise ValueError("Target feature not in target cols")
+
+
+            y_train_filtered = self.cluster_group.filter_y_by_features(self.y_train, target_features, self.y_feature_dict)
+            y_test_filtered = self.cluster_group.filter_y_by_features(self.y_test, target_features, self.y_feature_dict)
+            
             features = self.random_sample_features(
                 sample_size, model_features, self.cluster_group.group_params.strong_predictors
             )
@@ -989,12 +1010,7 @@ class StockCluster(Cluster):
 
                 num_encoder_layers = model_param["num_encoder_layers"]
 
-                if 'sum' in target_features[0]:
-                    target_feature_type = 'cumulative'
-                else:
-                    target_feature_type = 'lag'
-
-                model = RNNModel.objects.create(cluster = self, target_feature_type = target_feature_type)
+                model = RNNModel.objects.create(cluster = self, target_feature_type = target_feature_type, target_features = target_features)
                 print(
                     "Creating Model "
                     + str(num_models)

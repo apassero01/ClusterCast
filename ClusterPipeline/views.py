@@ -235,11 +235,17 @@ def get_model(request, group_id, cluster_id, model_id):
 def train_new_models(request, group_id, cluster_id):
     cluster_group = get_cluster_group(group_id)
 
+    training_dict = {
+        'target_feature_type': 'lag',
+        'max_num_days': 25,
+        'random_sample_fut_length' : True,
+    }
+
     for cluster in cluster_group.clusters:
         if cluster.pk == cluster_id:
             break
     print(cluster_group.group_params.strong_predictors)
-    cluster_group.train_single_cluster(cluster)
+    cluster_group.train_single_cluster(cluster, training_dict)
 
     return JsonResponse({"success": True})
 
