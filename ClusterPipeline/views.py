@@ -61,7 +61,7 @@ def cluster_run(request):
         target_features = [] 
         # target_features += ['pctChgclose{}_target'.format(i) for i in range(-14, 0) ]
         # target_features += ['pctChgclose-0_target']
-        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 3) ]
+        target_features += ['pctChgclose+{}_target'.format(i) for i in range(1, 16) ]
 
 
         scaling_dict = {
@@ -108,7 +108,13 @@ def cluster_run(request):
         group_params.create_model_dir()
         group_params.save()
 
-        CreateGroupBackground(group_params).start()
+        training_dict = {
+            'target_feature_type': 'lag',
+            'max_num_days': 15,
+            'random_sample_fut_length' : True,
+        }
+
+        CreateGroupBackground(group_params,training_dict).start()
 
         return HttpResponse("Run Started Sucessfully")
 
@@ -390,6 +396,7 @@ def forcast(request):
             )
             forcast_timeline.save()
             forcast_timeline.initialize()
+            print("prediction does not exist")
             forcast_timeline.add_prediction_range(
                 start_date=prediction_start_date,
                 end_date=prediction_end_date,
@@ -437,7 +444,7 @@ def forcast_detail(request, forcast_id, prediction_start_date, prediction_end_da
         tickers += group.group_params.tickers
     tickers = list(set(tickers))
 
-    start_date = "2020-01-01"
+    start_date = "2018-01-01"
     forcast = Pred.StockForcastTimeline.objects.get(pk=forcast_id)
     forcast.initialize()
     prediction = forcast.stock_predictions[0]
@@ -450,15 +457,21 @@ def forcast_detail(request, forcast_id, prediction_start_date, prediction_end_da
         prediction_start_date, prediction_end_date
     )
 
-    if prediction_start_date < datetime.today() - timedelta(days=30):
+    if prediction_end_date - prediction_start_date > timedelta(days=30):
         close_start_date = prediction_start_date
-    else:
-        close_start_date = datetime.today() - timedelta(days=30)
+    else: 
+        close_start_date = prediction_start_date - timedelta(days=30)
+    # if prediction_start_date < datetime.today() - timedelta(days=30):
+    #     close_start_date = prediction_start_date
+    # else:
+    #     close_start_date = datetime.today() - timedelta(days=30)
+
+    print(dates)
 
     close_df = yf.download(
         prediction.ticker,
         start=close_start_date.strftime("%Y-%m-%d"),
-        end=(date.today() + timedelta(days=1)).strftime("%Y-%m-%d"),
+        end=model_prediction_output[-1]["prediction_end_date"].split(" ")[0],
         interval=prediction.interval,
     )
 
@@ -467,6 +480,7 @@ def forcast_detail(request, forcast_id, prediction_start_date, prediction_end_da
     close_df["Date"] = close_df["Date"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     close_df_json = close_df.to_json(orient="split", date_format="iso")
+
 
     return render(
         request,

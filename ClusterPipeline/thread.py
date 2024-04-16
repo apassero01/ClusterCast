@@ -5,16 +5,12 @@ import sys
 
 
 class CreateGroupBackground(threading.Thread):
-    def __init__(self, group_params):
+    def __init__(self, group_params, training_dict):
         self.group_params = group_params 
         self.group_params.initialize()
+        self.training_dict = training_dict
         threading.Thread.__init__(self)
 
-        self.training_dict = {
-            'target_feature_type': 'lag',
-            'max_num_days': 25,
-            'random_sample_fut_length' : True,
-        }
 
     def run(self):
         try: 

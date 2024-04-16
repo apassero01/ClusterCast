@@ -577,10 +577,7 @@ class StockClusterGroup(ClusterGroup):
         """
 
         for cluster in self.clusters:
-            cluster.train_rnn(
-                model_features, model, self.group_params.feature_sample_num, self.group_params.feature_sample_size,
-                training_dict, 
-            )
+            cluster.train_rnn(model_features, self.group_params.target_cols, training_dict = training_dict, num_feauture_iterations = self.group_params.feature_sample_num, sample_size=self.group_params.feature_sample_size )
             cluster.save()
             # Maybe delete the models later
             cluster.hard_filter_models()
@@ -979,6 +976,8 @@ class StockCluster(Cluster):
             
             for feature in target_features: 
                 if feature not in target_cols: 
+                    print(feature)
+                    print(target_cols)
                     raise ValueError("Target feature not in target cols")
 
 

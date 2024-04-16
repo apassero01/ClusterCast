@@ -23,7 +23,48 @@ from tslearn.metrics import dtw
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from itertools import accumulate
+import pandas_market_calendars as mcal
 import gc
+
+
+
+
+class MarketCalendar:
+    NYSE = mcal.get_calendar("NYSE")
+    MAX_DATE = '2025-01-01'
+    def __init__(self):
+        pass 
+
+    def get_n_dates(self, start_date, n, inclusive = True):
+        """
+        Returns a list of n dates starting from start_date
+        """
+        schedule = self.NYSE.schedule(start_date=start_date, end_date=self.MAX_DATE)
+        dates = mcal.date_range(schedule, frequency = '1D')
+        dates = self.convert_to_midnight(dates)
+        if inclusive:
+            return dates[:n]
+        return dates[1:n+1]
+    def get_date_range(self, start_date, end_date = None):
+        """
+        Returns a list of dates from start_date to end_date
+        """
+        if end_date == None:
+            end_date = self.MAX_DATE
+        schedule = self.NYSE.schedule(start_date=start_date, end_date=end_date)
+        dates = mcal.date_range(schedule, frequency = '1D')
+        dates = self.convert_to_midnight(dates)
+        return dates
+
+    def convert_to_midnight(self, dates):
+        # Step 1: Convert to timezone-unaware DatetimeIndex
+        naive_datetimes = dates.tz_localize(None)
+        
+        # Step 2: Set time to midnight for each date in the DatetimeIndex
+        midnight_datetimes = naive_datetimes.normalize()
+        
+        # Return the modified DatetimeIndex
+        return midnight_datetimes
 
 
 def prediction_directory_path(instance, filename):
@@ -67,9 +108,8 @@ class StockPrediction(Prediction):
         """
         Initialize a calandar of business days and ensure the prediction_start_date is indeed a trading day
         """
-        holiday_calendar = USFederalHolidayCalendar()
-        holidays = holiday_calendar.holidays()
-        self.market_calendar = CustomBusinessDay(calendar=holiday_calendar)
+        
+        self.market_calendar = MarketCalendar() 
 
         self.dir_path = os.path.join(
             "media",
@@ -89,7 +129,7 @@ class StockPrediction(Prediction):
         This method iterates through all groups and calls lower level methods (predict_by_group) on each group.
         It formats all of the output dataframes into a merged dataframe and saves the dataframe to disk.
         """
-        self.create_general_data_set("2020-01-01", self.prediction_start_date)
+        self.create_general_data_set("2017-01-01", self.prediction_start_date)
         all_group_params = StockClusterGroupParams.objects.filter(
             interval=self.interval
         )
@@ -227,6 +267,9 @@ class StockPrediction(Prediction):
 
             model.deserialize_model()
 
+            print(input_data[0,0,:])
+            print(model.model_features)
+
             model_output = model.predict(input_data)
             if type(model_output) == list:
                 predictions = model_output[0]
@@ -239,9 +282,11 @@ class StockPrediction(Prediction):
             for i in range(len(seq_elements)):
                 end_date = seq_elements[i].end_date
                 cur_prediction = predictions[i]
-                future_dates = pd.date_range(
-                    end_date, periods=len(cur_prediction) + 1, freq=self.market_calendar
-                )[1:].tolist()
+                # future_dates = pd.date_range(
+                #     end_date, periods=len(cur_prediction) + 1, freq=self.market_calendar
+                # )[1:].tolist()
+
+                future_dates = self.market_calendar.get_n_dates(end_date, len(cur_prediction) + 1, inclusive = False).tolist()
 
                 cur_prediction_transformed = np.zeros_like(cur_prediction)
 
@@ -379,9 +424,11 @@ class StockPrediction(Prediction):
             if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
         ]
 
+        # mirrored_dataset.test_df['deriv+sma20'].to_csv('test_df.csv')
         mirrored_dataset.test_df = mirrored_dataset.scale_transform(
             mirrored_dataset.test_df, quant_min_max_feature_sets + standard_feature_sets
         )
+        # mirrored_dataset.test_df['deriv+sma20'].to_csv('test_df_scaled.csv')
 
         sequence_set = StockSequenceSet(mirrored_dataset.group_params)
         sequence_set.create_combined_sequence()
@@ -559,12 +606,12 @@ class StockPrediction(Prediction):
             self.stock_model_predictions.all().order_by("start_date")
         )
 
-        dates = pd.date_range(
-            self.prediction_start_date,
-            self.final_prediction_date,
-            freq=self.market_calendar,
-        ).tolist()
-        dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
+        # dates = pd.date_range(
+        #     self.prediction_start_date,
+        #     self.final_prediction_date,
+        #     freq=self.market_calendar,
+        # ).tolist()
+        dates = self.market_calendar.get_date_range(self.prediction_start_date, self.final_prediction_date).strftime("%Y-%m-%d %H:%M:%S").tolist()
 
         model_prediction_output = []
         for model_prediction in model_predictions:
@@ -601,15 +648,18 @@ class StockForcastTimeline(ForcastTimeline):
         """
         Initialize a calandar of business days and ensure the prediction_start_date is indeed a trading day
         """
-        holiday_calendar = USFederalHolidayCalendar()
-        holidays = holiday_calendar.holidays()
-        self.market_calendar = CustomBusinessDay(calendar=holiday_calendar)
+        # holiday_calendar = USFederalHolidayCalendar()
+        # holidays = holiday_calendar.holidays()
+        # self.market_calendar = CustomBusinessDay(calendar=holiday_calendar)
 
-        if self.prediction_start_date in holidays:
-            next_business_day = self.market_calendar.rollforward(
-                self.prediction_start_date
-            )
-            self.prediction_start_date = next_business_day
+        self.market_calendar = MarketCalendar()
+        self.prediction_start_date = self.market_calendar.get_date_range(self.prediction_start_date).tolist()[0]
+
+        # if self.prediction_start_date in holidays:
+        #     next_business_day = self.market_calendar.rollforward(
+        #         self.prediction_start_date
+        #     )
+        #     self.prediction_start_date = next_business_day
 
         self.stock_predictions = list(
             StockPrediction.objects.filter(forcast_timeline=self)
@@ -648,9 +698,17 @@ class StockForcastTimeline(ForcastTimeline):
         Creates a range of dates to predict on
         """
 
-        prediction_range = pd.date_range(
-            start_date, end_date, freq=self.market_calendar
-        ).tolist()
+
+        # prediction_range = pd.date_range(
+        #     start_date, end_date, freq=self.market_calendar
+        # ).tolist()
+
+        print("Start Date: {}".format(start_date))
+
+        prediction_range = self.market_calendar.get_date_range(start_date, end_date)
+        if len(prediction_range) == 0:
+            return
+        print("Prediction Range: {}".format(prediction_range))
 
         current_predictions = []
 
@@ -705,13 +763,14 @@ class StockForcastTimeline(ForcastTimeline):
 
         model_predictions_output = []
 
-        print(self.market_calendar)
-        dates = pd.date_range(
-            start=self.prediction_start_date,
-            end=self.final_prediction_date,
-            freq=self.market_calendar,
-        ).tolist()
-        dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
+        # print(self.market_calendar)
+        # dates = pd.date_range(
+        #     start=self.prediction_start_date,
+        #     end=self.final_prediction_date,
+        #     freq=self.market_calendar,
+        # ).tolist()
+        dates = self.market_calendar.get_date_range(self.prediction_start_date, self.final_prediction_date).strftime("%Y-%m-%d %H:%M:%S").tolist()
+        # dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in dates]
 
         for stock_prediction in self.stock_predictions:
             if (
@@ -724,6 +783,9 @@ class StockForcastTimeline(ForcastTimeline):
                 cur_dates,
                 model_prediction_output,
             ) = stock_prediction.create_prediction_output()
+            print("Prediction ID {}".format(stock_prediction.id))
+            print("Stock Prediction Start Date {}".format(stock_prediction.prediction_start_date))
+            print("Stock Prediction End Date {}".format(stock_prediction.final_prediction_date))
             model_predictions_output.append(
                 {
                     "prediction_id": stock_prediction.id,
