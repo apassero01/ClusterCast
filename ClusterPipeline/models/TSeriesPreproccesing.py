@@ -31,7 +31,7 @@ class FeatureSet:
         name="",
         scale_range=(-1, 1),
         ticker=None,
-        percentiles=[5, 95],
+        percentiles=[1, 99],
     ):
         self.name = name
         self.cols = []
@@ -319,6 +319,13 @@ class StockDataSet(DataSet):
             for feature_set in self.X_feature_sets
             if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
         ]
+
+        standard_feature_sets += [
+            feature_set
+            for feature_set in self.y_feature_sets
+            if feature_set.scaling_method.value == ScalingMethod.STANDARD.value
+        ]
+
         if len(standard_feature_sets) > 0:
             self.training_df, self.test_df = self.scale_standard(standard_feature_sets, self.training_df, self.test_df)
 
@@ -412,10 +419,13 @@ class StockDataSet(DataSet):
         y_feature_sets += feature_sets
         
 
-        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -25, end_lag = -1, ticker = self.ticker)
+        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = -25, end_lag = -1, ticker = self.ticker, scaling_method = self.scaling_dict['target_vars'])
         y_feature_sets += feature_sets
 
-        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 14, ticker = self.ticker)
+        self.df, feature_sets = create_lag_vars_target(self.df, ['pctChgclose'], start_lag = 0, end_lag = 14, ticker = self.ticker, scaling_method = self.scaling_dict['target_vars'])
+        y_feature_sets += feature_sets
+
+        self.df, feature_sets = create_lag_vars_target(self.df, ['close'], start_lag = -25, end_lag = -1, ticker = self.ticker, scaling_method = self.scaling_dict['target_vars'])
         y_feature_sets += feature_sets
         
         for feature_set in y_feature_sets:
