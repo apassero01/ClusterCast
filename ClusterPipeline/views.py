@@ -236,6 +236,8 @@ def get_model(request, group_id, cluster_id, model_id):
 
     model_results = model.generate_results()
 
+    return JsonResponse(model_results)
+
 
 @csrf_exempt
 def train_new_models(request, group_id, cluster_id):
